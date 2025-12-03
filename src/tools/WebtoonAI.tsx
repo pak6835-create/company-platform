@@ -285,6 +285,7 @@ function WebtoonAI() {
             <label>모델</label>
             <select value={model} onChange={(e) => setModel(e.target.value)}>
               <option value="gemini-2.0-flash-exp">Nano Banana (무료)</option>
+              <option value="gemini-3-pro-image-preview">Nano Banana Pro 3.0 (유료)</option>
             </select>
           </div>
 
