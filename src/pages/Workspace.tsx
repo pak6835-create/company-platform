@@ -34,6 +34,15 @@ interface Board {
 interface WorkspaceData {
   boards: { [key: string]: Board }
   currentBoardId: string
+  tray: TrayItem[]
+}
+
+// 트레이 아이템 타입
+interface TrayItem {
+  id: string
+  type: 'image' | 'note' | 'text' | 'shape' | 'board'
+  data: ImageNodeData | NoteNodeData | TextNodeData | ShapeNodeData | BoardNodeData
+  createdAt: number
 }
 
 // 노드 데이터 타입들
@@ -67,6 +76,8 @@ interface BoardNodeData {
   name: string
   color?: string
   itemCount?: number
+  onNameChange?: (boardId: string, newName: string) => void
+  onNodeDrop?: (targetBoardId: string, nodeId: string) => void
 }
 
 // 커스텀 이미지 노드
@@ -136,18 +147,110 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   )
 }
 
-// 보드 노드 (폴더 아이콘) - 더블클릭으로 진입
-function BoardNode({ data, selected }: NodeProps<BoardNodeData>) {
+// 글로벌 드래그 상태 관리 (노드 간 드래그 앤 드롭)
+let globalDraggedNodeId: string | null = null
+
+// 보드 노드 (심플한 폴더 아이콘) - 더블클릭으로 진입
+function BoardNode({ data, selected, id }: NodeProps<BoardNodeData>) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState(data.name || '')
+  const [isDragOver, setIsDragOver] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const nodeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
+  const handleNameDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditName(data.name || '')
+    setIsEditing(true)
+  }
+
+  const handleNameChange = () => {
+    setIsEditing(false)
+    if (data.onNameChange) {
+      data.onNameChange(data.boardId, editName.trim())
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleNameChange()
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+      setEditName(data.name || '')
+    }
+  }
+
+  // 마우스가 보드 위에 있는지 확인
+  useEffect(() => {
+    const node = nodeRef.current
+    if (!node) return
+
+    const handleMouseOver = () => {
+      if (globalDraggedNodeId && globalDraggedNodeId !== id) {
+        setIsDragOver(true)
+      }
+    }
+
+    const handleMouseOut = () => {
+      setIsDragOver(false)
+    }
+
+    const handleMouseUp = () => {
+      if (isDragOver && globalDraggedNodeId && globalDraggedNodeId !== id && data.onNodeDrop) {
+        data.onNodeDrop(data.boardId, globalDraggedNodeId)
+      }
+      setIsDragOver(false)
+    }
+
+    node.addEventListener('mouseover', handleMouseOver)
+    node.addEventListener('mouseout', handleMouseOut)
+    node.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      node.removeEventListener('mouseover', handleMouseOver)
+      node.removeEventListener('mouseout', handleMouseOut)
+      node.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [id, data, isDragOver])
+
   return (
-    <div className={`board-node ${selected ? 'selected' : ''}`} style={{ borderColor: data.color || '#3b82f6' }}>
-      <div className="board-node-icon" style={{ backgroundColor: data.color || '#3b82f6' }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+    <div
+      ref={nodeRef}
+      className={`board-node ${selected ? 'selected' : ''} ${isDragOver ? 'drag-over' : ''}`}
+    >
+      <div className="board-node-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isDragOver ? '#3b82f6' : '#6b7280'} strokeWidth="1.5">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       </div>
-      <div className="board-node-name">{data.name}</div>
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          className="board-node-input"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onBlur={handleNameChange}
+          onKeyDown={handleKeyDown}
+          placeholder="보드 이름"
+        />
+      ) : (
+        <div
+          className="board-node-name"
+          onDoubleClick={handleNameDoubleClick}
+        >
+          {data.name || '새 보드'}
+        </div>
+      )}
       {data.itemCount !== undefined && data.itemCount > 0 && (
-        <div className="board-node-count">{data.itemCount}개 항목</div>
+        <div className="board-node-count">{data.itemCount}</div>
       )}
     </div>
   )
@@ -180,14 +283,6 @@ const shapeColors = [
   { name: '회색', color: '#6b7280' },
 ]
 
-// 보드 색상 옵션
-const boardColors = [
-  { name: '파랑', color: '#3b82f6' },
-  { name: '초록', color: '#22c55e' },
-  { name: '보라', color: '#a855f7' },
-  { name: '주황', color: '#f97316' },
-  { name: '분홍', color: '#ec4899' },
-]
 
 // 로컬 스토리지 키
 const STORAGE_KEY = 'workspace_data'
@@ -215,7 +310,8 @@ const createInitialData = (): WorkspaceData => ({
       updatedAt: Date.now(),
     }
   },
-  currentBoardId: 'home'
+  currentBoardId: 'home',
+  tray: []
 })
 
 // 데이터 로드
@@ -223,7 +319,10 @@ const loadWorkspaceData = (): WorkspaceData => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      return JSON.parse(saved)
+      const data = JSON.parse(saved)
+      // tray가 없으면 빈 배열로 초기화
+      if (!data.tray) data.tray = []
+      return data
     }
   } catch (e) {
     console.error('Failed to load workspace data:', e)
@@ -259,9 +358,11 @@ function WorkspaceCanvas() {
   const [error, setError] = useState('')
 
   const nodeIdCounter = useRef(Date.now())
+  const [showTray, setShowTray] = useState(true)
 
   // 현재 보드 가져오기
   const currentBoard = workspaceData.boards[workspaceData.currentBoardId]
+  const trayItems = workspaceData.tray || []
 
   // 브레드크럼 경로 생성
   const getBreadcrumbs = useCallback(() => {
@@ -269,7 +370,7 @@ function WorkspaceCanvas() {
     let boardId: string | null = workspaceData.currentBoardId
 
     while (boardId) {
-      const board = workspaceData.boards[boardId]
+      const board: Board | undefined = workspaceData.boards[boardId]
       if (board) {
         path.unshift(board)
         boardId = board.parentId
@@ -280,13 +381,39 @@ function WorkspaceCanvas() {
     return path
   }, [workspaceData])
 
-  // 보드 로드
+  // 보드 이름 변경 ref (콜백 순환 참조 방지)
+  const boardNameChangeRef = useRef<(boardId: string, newName: string) => void>()
+  // 노드를 다른 보드로 이동 ref
+  const nodeMoveRef = useRef<(targetBoardId: string, nodeId: string) => void>()
+
+  // 보드 로드 및 보드 노드 개수 업데이트
   useEffect(() => {
     if (currentBoard) {
-      setNodes(currentBoard.nodes)
+      // 보드 노드의 itemCount와 onNameChange를 업데이트
+      const updatedNodes = currentBoard.nodes.map(node => {
+        if (node.type === 'board' && node.data.boardId) {
+          const targetBoard = workspaceData.boards[node.data.boardId]
+          const itemCount = targetBoard ? targetBoard.nodes.length : 0
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              itemCount,
+              onNameChange: (boardId: string, newName: string) => {
+                boardNameChangeRef.current?.(boardId, newName)
+              },
+              onNodeDrop: (targetBoardId: string, nodeId: string) => {
+                nodeMoveRef.current?.(targetBoardId, nodeId)
+              }
+            }
+          }
+        }
+        return node
+      })
+      setNodes(updatedNodes)
       setEdges(currentBoard.edges)
     }
-  }, [workspaceData.currentBoardId, currentBoard, setNodes, setEdges])
+  }, [workspaceData.currentBoardId, workspaceData.boards, setNodes, setEdges])
 
   // 변경사항 저장 (디바운스)
   useEffect(() => {
@@ -343,6 +470,19 @@ function WorkspaceCanvas() {
       navigateToBoard(node.data.boardId)
     }
   }, [navigateToBoard])
+
+  // 노드 드래그 시작 핸들러
+  const onNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+    globalDraggedNodeId = node.id
+  }, [])
+
+  // 노드 드래그 종료 핸들러
+  const onNodeDragStop = useCallback(() => {
+    // 약간의 딜레이 후 초기화 (드롭 처리를 위해)
+    setTimeout(() => {
+      globalDraggedNodeId = null
+    }, 100)
+  }, [])
 
   // 이미지 생성 함수
   const generateImage = async (promptText: string): Promise<string> => {
@@ -422,14 +562,13 @@ function WorkspaceCanvas() {
   }
 
   // 새 보드 생성
-  const addBoard = (color: string = '#3b82f6') => {
+  const addBoard = () => {
     const boardId = `board-${nodeIdCounter.current++}`
-    const boardName = `보드 ${Object.keys(workspaceData.boards).length}`
 
     // 새 보드 데이터 생성
     const newBoard: Board = {
       id: boardId,
-      name: boardName,
+      name: '',
       parentId: workspaceData.currentBoardId,
       nodes: [],
       edges: [],
@@ -442,7 +581,17 @@ function WorkspaceCanvas() {
       id: `node-${boardId}`,
       type: 'board',
       position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { boardId, name: boardName, color, itemCount: 0 }
+      data: {
+        boardId,
+        name: '',
+        itemCount: 0,
+        onNameChange: (id: string, name: string) => {
+          boardNameChangeRef.current?.(id, name)
+        },
+        onNodeDrop: (targetBoardId: string, nodeId: string) => {
+          nodeMoveRef.current?.(targetBoardId, nodeId)
+        }
+      }
     }
 
     // 워크스페이스 데이터 업데이트
@@ -460,6 +609,179 @@ function WorkspaceCanvas() {
     setShowAddPanel(false)
   }
 
+  // 보드 이름 변경
+  const handleBoardNameChange = useCallback((boardId: string, newName: string) => {
+    // 보드 데이터 업데이트
+    const board = workspaceData.boards[boardId]
+    if (!board) return
+
+    const updatedBoards = {
+      ...workspaceData.boards,
+      [boardId]: { ...board, name: newName, updatedAt: Date.now() }
+    }
+
+    // 현재 보드의 노드에서도 이름 업데이트
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === 'board' && node.data.boardId === boardId) {
+          return { ...node, data: { ...node.data, name: newName } }
+        }
+        return node
+      })
+    )
+
+    const updatedData = { ...workspaceData, boards: updatedBoards }
+    setWorkspaceData(updatedData)
+    saveWorkspaceData(updatedData)
+  }, [workspaceData, setNodes])
+
+  // ref에 콜백 연결
+  useEffect(() => {
+    boardNameChangeRef.current = handleBoardNameChange
+  }, [handleBoardNameChange])
+
+
+  // 트레이에 아이템 추가
+  const addToTray = useCallback((type: TrayItem['type'], data: TrayItem['data']) => {
+    const newItem: TrayItem = {
+      id: `tray-${nodeIdCounter.current++}`,
+      type,
+      data,
+      createdAt: Date.now()
+    }
+    const updatedData = {
+      ...workspaceData,
+      tray: [...workspaceData.tray, newItem]
+    }
+    setWorkspaceData(updatedData)
+    saveWorkspaceData(updatedData)
+  }, [workspaceData])
+
+  // 트레이에서 아이템 제거
+  const removeFromTray = useCallback((itemId: string) => {
+    const updatedData = {
+      ...workspaceData,
+      tray: workspaceData.tray.filter(item => item.id !== itemId)
+    }
+    setWorkspaceData(updatedData)
+    saveWorkspaceData(updatedData)
+  }, [workspaceData])
+
+  // 트레이 아이템을 캔버스에 배치
+  const placeFromTray = useCallback((item: TrayItem, position: { x: number, y: number }) => {
+    const newNode: Node = {
+      id: String(nodeIdCounter.current++),
+      type: item.type,
+      position,
+      data: item.data
+    }
+
+    // 보드 타입인 경우 추가 처리
+    if (item.type === 'board' && (item.data as BoardNodeData).boardId) {
+      const boardData = item.data as BoardNodeData
+      newNode.data = {
+        ...boardData,
+        onNameChange: (id: string, name: string) => {
+          boardNameChangeRef.current?.(id, name)
+        }
+      }
+    }
+
+    setNodes((nds) => [...nds, newNode])
+    removeFromTray(item.id)
+  }, [setNodes, removeFromTray])
+
+  // 클립보드 붙여넣기 핸들러
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const file = item.getAsFile()
+          if (file) {
+            const reader = new FileReader()
+            reader.onload = (ev) => {
+              const imageUrl = ev.target?.result as string
+              addToTray('image', {
+                imageUrl,
+                label: '클립보드 이미지',
+                width: 300,
+                height: 300
+              } as ImageNodeData)
+            }
+            reader.readAsDataURL(file)
+          }
+          break
+        }
+      }
+    }
+
+    window.addEventListener('paste', handlePaste)
+    return () => window.removeEventListener('paste', handlePaste)
+  }, [addToTray])
+
+  // 노드를 다른 보드로 이동
+  const moveNodeToBoard = useCallback((nodeId: string, targetBoardId: string) => {
+    const node = nodes.find(n => n.id === nodeId)
+    if (!node) return
+
+    // 보드 노드인 경우 자기 자신이나 자식 보드로 이동 불가
+    if (node.type === 'board') {
+      const boardId = (node.data as BoardNodeData).boardId
+      if (boardId === targetBoardId) return
+
+      // 자식 보드인지 확인
+      let currentId: string | null = targetBoardId
+      while (currentId) {
+        if (currentId === boardId) return // 순환 방지
+        currentId = workspaceData.boards[currentId]?.parentId || null
+      }
+
+      // 보드의 parentId 업데이트
+      const board = workspaceData.boards[boardId]
+      if (board) {
+        const updatedBoards = {
+          ...workspaceData.boards,
+          [boardId]: { ...board, parentId: targetBoardId }
+        }
+        const updatedData = { ...workspaceData, boards: updatedBoards }
+        setWorkspaceData(updatedData)
+        saveWorkspaceData(updatedData)
+      }
+    }
+
+    // 현재 보드에서 노드 제거
+    setNodes((nds) => nds.filter(n => n.id !== nodeId))
+
+    // 타겟 보드에 노드 추가
+    const targetBoard = workspaceData.boards[targetBoardId]
+    if (targetBoard) {
+      const updatedNode = {
+        ...node,
+        position: { x: Math.random() * 300 + 100, y: Math.random() * 200 + 100 }
+      }
+      const updatedBoards = {
+        ...workspaceData.boards,
+        [targetBoardId]: {
+          ...targetBoard,
+          nodes: [...targetBoard.nodes, updatedNode],
+          updatedAt: Date.now()
+        }
+      }
+      const updatedData = { ...workspaceData, boards: updatedBoards }
+      setWorkspaceData(updatedData)
+      saveWorkspaceData(updatedData)
+    }
+  }, [nodes, workspaceData, setNodes])
+
+  // nodeMoveRef에 콜백 연결
+  useEffect(() => {
+    nodeMoveRef.current = moveNodeToBoard
+  }, [moveNodeToBoard])
+
   // AI 생성 실행
   const handleGenerate = async () => {
     if (!apiKey || !prompt) {
@@ -473,8 +795,14 @@ function WorkspaceCanvas() {
 
     try {
       const imageUrl = await generateImage(prompt)
-      addImageToCanvas(imageUrl, prompt.slice(0, 30) + '...')
-      setProgress({ text: '완료!', percent: 100 })
+      // 트레이에 추가
+      addToTray('image', {
+        imageUrl,
+        label: prompt.slice(0, 30) + '...',
+        width: 300,
+        height: 300
+      } as ImageNodeData)
+      setProgress({ text: '완료! 트레이에 추가됨', percent: 100 })
       setPrompt('')
       setShowAIPanel(false)
     } catch (err) {
@@ -707,22 +1035,13 @@ function WorkspaceCanvas() {
           <div className="add-panel-content">
             {/* 보드 (폴더) */}
             <div className="add-section">
-              <h4>보드 (폴더)</h4>
-              <div className="add-color-grid">
-                {boardColors.map((bc) => (
-                  <button
-                    key={bc.color}
-                    className="add-color-btn add-board-btn"
-                    style={{ backgroundColor: bc.color }}
-                    onClick={() => addBoard(bc.color)}
-                    title={bc.name + ' 보드'}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                      <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                    </svg>
-                  </button>
-                ))}
-              </div>
+              <h4>보드</h4>
+              <button className="add-item-btn" onClick={addBoard}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span>새 보드</span>
+              </button>
             </div>
 
             {/* 노트 */}
@@ -858,12 +1177,30 @@ function WorkspaceCanvas() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView
           selectionOnDrag
           panOnScroll={activeTool === 'pan'}
           panOnDrag={activeTool === 'pan'}
           selectNodesOnDrag={activeTool === 'select'}
+          onDrop={(e) => {
+            e.preventDefault()
+            const trayItemId = e.dataTransfer.getData('tray-item-id')
+            if (trayItemId) {
+              const item = trayItems.find(i => i.id === trayItemId)
+              if (item) {
+                const reactFlowBounds = e.currentTarget.getBoundingClientRect()
+                const position = {
+                  x: e.clientX - reactFlowBounds.left - 60,
+                  y: e.clientY - reactFlowBounds.top - 48
+                }
+                placeFromTray(item, position)
+              }
+            }
+          }}
+          onDragOver={(e) => e.preventDefault()}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d4d4d8" />
           <Controls />
@@ -879,6 +1216,79 @@ function WorkspaceCanvas() {
           />
         </ReactFlow>
       </div>
+
+      {/* 하단 트레이 */}
+      {showTray && (
+        <div className="bottom-tray">
+          <div className="tray-header">
+            <span className="tray-title">트레이</span>
+            <span className="tray-count">{trayItems.length}개</span>
+            <button className="tray-toggle" onClick={() => setShowTray(false)} title="트레이 닫기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+          <div className="tray-items">
+            {trayItems.length === 0 ? (
+              <div className="tray-empty">
+                Ctrl+V로 이미지 붙여넣기 또는<br />AI 생성 이미지가 여기에 저장됩니다
+              </div>
+            ) : (
+              trayItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="tray-item"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('tray-item-id', item.id)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  {item.type === 'image' && (item.data as ImageNodeData).imageUrl && (
+                    <img
+                      src={(item.data as ImageNodeData).imageUrl}
+                      alt={(item.data as ImageNodeData).label}
+                      className="tray-item-image"
+                      draggable={false}
+                    />
+                  )}
+                  {item.type === 'note' && (
+                    <div
+                      className="tray-item-note"
+                      style={{ backgroundColor: (item.data as NoteNodeData).backgroundColor }}
+                    />
+                  )}
+                  {item.type === 'board' && (
+                    <div className="tray-item-board">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.5">
+                        <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  <button
+                    className="tray-item-remove"
+                    onClick={() => removeFromTray(item.id)}
+                    title="트레이에서 제거"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 트레이 열기 버튼 (트레이가 닫혀있을 때) */}
+      {!showTray && trayItems.length > 0 && (
+        <button className="tray-open-btn" onClick={() => setShowTray(true)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M5 12l7-7 7 7" />
+          </svg>
+          트레이 ({trayItems.length})
+        </button>
+      )}
     </div>
   )
 }
