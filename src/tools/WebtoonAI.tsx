@@ -49,49 +49,45 @@ function WebtoonAI() {
   }
 
   const generateImage = async (promptText: string, inputImage: string | null = null): Promise<string> => {
-    // 환경에 따라 API 엔드포인트 선택
+    // 배포 환경: Netlify Functions, 로컬: Vite 프록시
     const isProduction = window.location.hostname !== 'localhost'
 
-    let response: Response
+    const endpoint = isProduction
+      ? '/.netlify/functions/generate'
+      : `/api/gemini/v1beta/models/${model}:generateContent?key=${apiKey}`
 
-    if (isProduction) {
-      // Netlify Functions 사용 (배포 환경)
-      response = await fetch('/.netlify/functions/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptText,
-          image: inputImage,
-          apiKey: apiKey,
-          model: model
-        })
+    const parts: Array<{text?: string, inline_data?: {mime_type: string, data: string}}> = [{ text: promptText }]
+
+    if (inputImage) {
+      const base64Data = inputImage.includes(',') ? inputImage.split(',')[1] : inputImage
+      parts.push({
+        inline_data: {
+          mime_type: 'image/png',
+          data: base64Data
+        }
       })
-    } else {
-      // 직접 Gemini API 호출 (로컬 개발)
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: inputImage ? [
-              { text: promptText },
-              { inline_data: { mime_type: 'image/png', data: inputImage.split(',')[1] } }
-            ] : [
-              { text: promptText }
-            ]
-          }],
+    }
+
+    const body = isProduction
+      ? JSON.stringify({ prompt: promptText, image: inputImage, apiKey, model })
+      : JSON.stringify({
+          contents: [{ parts }],
           generationConfig: {
             responseModalities: ['image', 'text'],
             responseMimeType: 'image/png'
           }
         })
-      })
-    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    })
 
     const data = await response.json()
 
     if (data.error) {
-      throw new Error(data.error.message || 'API 오류 발생')
+      throw new Error(data.error.message || data.error || 'API 오류 발생')
     }
 
     const imagePart = data.candidates?.[0]?.content?.parts?.find(
