@@ -30,9 +30,6 @@ function Layout() {
             <Link to="/workspace" className={`nav-link ${isActive('/workspace') ? 'active' : ''}`}>
               워크스페이스
             </Link>
-            <Link to="/tools" className={`nav-link ${isActive('/tools') ? 'active' : ''}`}>
-              도구
-            </Link>
             <Link to="/blog" className={`nav-link ${isActive('/blog') ? 'active' : ''}`}>
               블로그
             </Link>
