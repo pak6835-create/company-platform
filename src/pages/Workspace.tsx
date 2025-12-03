@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactFlow, {
   Background,
@@ -19,6 +19,22 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import './Workspace.css'
+
+// 타입 정의
+interface Board {
+  id: string
+  name: string
+  parentId: string | null
+  nodes: Node[]
+  edges: Edge[]
+  createdAt: number
+  updatedAt: number
+}
+
+interface WorkspaceData {
+  boards: { [key: string]: Board }
+  currentBoardId: string
+}
 
 // 노드 데이터 타입들
 interface ImageNodeData {
@@ -44,6 +60,13 @@ interface ShapeNodeData {
   backgroundColor?: string
   width?: number
   height?: number
+}
+
+interface BoardNodeData {
+  boardId: string
+  name: string
+  color?: string
+  itemCount?: number
 }
 
 // 커스텀 이미지 노드
@@ -113,26 +136,30 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   )
 }
 
+// 보드 노드 (폴더 아이콘) - 더블클릭으로 진입
+function BoardNode({ data, selected }: NodeProps<BoardNodeData>) {
+  return (
+    <div className={`board-node ${selected ? 'selected' : ''}`} style={{ borderColor: data.color || '#3b82f6' }}>
+      <div className="board-node-icon" style={{ backgroundColor: data.color || '#3b82f6' }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+      </div>
+      <div className="board-node-name">{data.name}</div>
+      {data.itemCount !== undefined && data.itemCount > 0 && (
+        <div className="board-node-count">{data.itemCount}개 항목</div>
+      )}
+    </div>
+  )
+}
+
 const nodeTypes = {
   image: ImageNode,
   note: NoteNode,
   text: TextNode,
   shape: ShapeNode,
+  board: BoardNode,
 }
-
-const initialNodes: Node[] = [
-  {
-    id: '1',
-    type: 'note',
-    position: { x: 250, y: 100 },
-    data: {
-      content: 'Workspace에 오신 것을 환영합니다!\n\n왼쪽 AI 도구로 이미지를 생성하면\n여기에 자동으로 배치됩니다.',
-      backgroundColor: '#fef3c7',
-    },
-  },
-]
-
-const initialEdges: Edge[] = []
 
 // 노트 색상 옵션
 const noteColors = [
@@ -153,10 +180,71 @@ const shapeColors = [
   { name: '회색', color: '#6b7280' },
 ]
 
+// 보드 색상 옵션
+const boardColors = [
+  { name: '파랑', color: '#3b82f6' },
+  { name: '초록', color: '#22c55e' },
+  { name: '보라', color: '#a855f7' },
+  { name: '주황', color: '#f97316' },
+  { name: '분홍', color: '#ec4899' },
+]
+
+// 로컬 스토리지 키
+const STORAGE_KEY = 'workspace_data'
+
+// 초기 데이터 생성
+const createInitialData = (): WorkspaceData => ({
+  boards: {
+    'home': {
+      id: 'home',
+      name: '홈 보드',
+      parentId: null,
+      nodes: [
+        {
+          id: 'welcome-note',
+          type: 'note',
+          position: { x: 250, y: 100 },
+          data: {
+            content: '홈 보드에 오신 것을 환영합니다!\n\n여기서 작업을 시작하세요.\n새 보드를 만들어 정리할 수 있습니다.',
+            backgroundColor: '#fef3c7',
+          },
+        },
+      ],
+      edges: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+  },
+  currentBoardId: 'home'
+})
+
+// 데이터 로드
+const loadWorkspaceData = (): WorkspaceData => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load workspace data:', e)
+  }
+  return createInitialData()
+}
+
+// 데이터 저장
+const saveWorkspaceData = (data: WorkspaceData) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  } catch (e) {
+    console.error('Failed to save workspace data:', e)
+  }
+}
+
 function WorkspaceCanvas() {
   const navigate = useNavigate()
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [workspaceData, setWorkspaceData] = useState<WorkspaceData>(loadWorkspaceData)
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [showAIPanel, setShowAIPanel] = useState(false)
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [activeTool, setActiveTool] = useState<string>('select')
@@ -170,12 +258,91 @@ function WorkspaceCanvas() {
   const [progress, setProgress] = useState({ text: '', percent: 0 })
   const [error, setError] = useState('')
 
-  const nodeIdCounter = useRef(2)
+  const nodeIdCounter = useRef(Date.now())
+
+  // 현재 보드 가져오기
+  const currentBoard = workspaceData.boards[workspaceData.currentBoardId]
+
+  // 브레드크럼 경로 생성
+  const getBreadcrumbs = useCallback(() => {
+    const path: Board[] = []
+    let boardId: string | null = workspaceData.currentBoardId
+
+    while (boardId) {
+      const board = workspaceData.boards[boardId]
+      if (board) {
+        path.unshift(board)
+        boardId = board.parentId
+      } else {
+        break
+      }
+    }
+    return path
+  }, [workspaceData])
+
+  // 보드 로드
+  useEffect(() => {
+    if (currentBoard) {
+      setNodes(currentBoard.nodes)
+      setEdges(currentBoard.edges)
+    }
+  }, [workspaceData.currentBoardId, currentBoard, setNodes, setEdges])
+
+  // 변경사항 저장 (디바운스)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentBoard) {
+        const updatedData = {
+          ...workspaceData,
+          boards: {
+            ...workspaceData.boards,
+            [workspaceData.currentBoardId]: {
+              ...currentBoard,
+              nodes,
+              edges,
+              updatedAt: Date.now()
+            }
+          }
+        }
+        setWorkspaceData(updatedData)
+        saveWorkspaceData(updatedData)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [nodes, edges])
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   )
+
+  // 보드로 이동
+  const navigateToBoard = useCallback((boardId: string) => {
+    // 현재 보드 저장
+    const updatedData = {
+      ...workspaceData,
+      boards: {
+        ...workspaceData.boards,
+        [workspaceData.currentBoardId]: {
+          ...currentBoard,
+          nodes,
+          edges,
+          updatedAt: Date.now()
+        }
+      },
+      currentBoardId: boardId
+    }
+    setWorkspaceData(updatedData)
+    saveWorkspaceData(updatedData)
+  }, [workspaceData, currentBoard, nodes, edges])
+
+  // 노드 더블클릭 핸들러 (보드 진입)
+  const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    if (node.type === 'board' && node.data.boardId) {
+      navigateToBoard(node.data.boardId)
+    }
+  }, [navigateToBoard])
 
   // 이미지 생성 함수
   const generateImage = async (promptText: string): Promise<string> => {
@@ -254,6 +421,45 @@ function WorkspaceCanvas() {
     setShowAddPanel(false)
   }
 
+  // 새 보드 생성
+  const addBoard = (color: string = '#3b82f6') => {
+    const boardId = `board-${nodeIdCounter.current++}`
+    const boardName = `보드 ${Object.keys(workspaceData.boards).length}`
+
+    // 새 보드 데이터 생성
+    const newBoard: Board = {
+      id: boardId,
+      name: boardName,
+      parentId: workspaceData.currentBoardId,
+      nodes: [],
+      edges: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    // 보드 노드 생성
+    const newNode: Node<BoardNodeData> = {
+      id: `node-${boardId}`,
+      type: 'board',
+      position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
+      data: { boardId, name: boardName, color, itemCount: 0 }
+    }
+
+    // 워크스페이스 데이터 업데이트
+    const updatedData = {
+      ...workspaceData,
+      boards: {
+        ...workspaceData.boards,
+        [boardId]: newBoard
+      }
+    }
+    setWorkspaceData(updatedData)
+    saveWorkspaceData(updatedData)
+
+    setNodes((nds) => [...nds, newNode])
+    setShowAddPanel(false)
+  }
+
   // AI 생성 실행
   const handleGenerate = async () => {
     if (!apiKey || !prompt) {
@@ -280,6 +486,19 @@ function WorkspaceCanvas() {
 
   // 선택된 노드 삭제
   const deleteSelected = () => {
+    // 보드 노드 삭제 시 해당 보드도 삭제
+    const selectedBoardNodes = nodes.filter(n => n.selected && n.type === 'board')
+    if (selectedBoardNodes.length > 0) {
+      const boardIdsToDelete = selectedBoardNodes.map(n => (n.data as BoardNodeData).boardId)
+      const updatedBoards = { ...workspaceData.boards }
+      boardIdsToDelete.forEach(id => {
+        delete updatedBoards[id]
+      })
+      const updatedData = { ...workspaceData, boards: updatedBoards }
+      setWorkspaceData(updatedData)
+      saveWorkspaceData(updatedData)
+    }
+
     setNodes((nds) => nds.filter((n) => !n.selected))
     setEdges((eds) => eds.filter((e) => !e.selected))
   }
@@ -294,8 +513,50 @@ function WorkspaceCanvas() {
     setNodes((nds) => nds.map((n) => ({ ...n, selected: false })))
   }
 
+  // 상위 보드로 이동
+  const goToParentBoard = () => {
+    if (currentBoard?.parentId) {
+      navigateToBoard(currentBoard.parentId)
+    }
+  }
+
+  const breadcrumbs = getBreadcrumbs()
+
   return (
     <div className="workspace-container">
+      {/* 상단 브레드크럼 네비게이션 */}
+      <div className="workspace-header">
+        <div className="breadcrumb">
+          {breadcrumbs.map((board, index) => (
+            <span key={board.id} className="breadcrumb-item">
+              {index > 0 && <span className="breadcrumb-separator">/</span>}
+              <button
+                className={`breadcrumb-link ${board.id === workspaceData.currentBoardId ? 'active' : ''}`}
+                onClick={() => navigateToBoard(board.id)}
+              >
+                {board.id === 'home' ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                ) : null}
+                <span>{board.name}</span>
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="workspace-header-actions">
+          {currentBoard?.parentId && (
+            <button className="header-btn" onClick={goToParentBoard} title="상위 보드로">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              뒤로
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 왼쪽 툴바 */}
       <div className="toolbar">
         {/* 나가기 버튼 */}
@@ -444,6 +705,26 @@ function WorkspaceCanvas() {
             <button className="add-panel-close" onClick={() => setShowAddPanel(false)}>×</button>
           </div>
           <div className="add-panel-content">
+            {/* 보드 (폴더) */}
+            <div className="add-section">
+              <h4>보드 (폴더)</h4>
+              <div className="add-color-grid">
+                {boardColors.map((bc) => (
+                  <button
+                    key={bc.color}
+                    className="add-color-btn add-board-btn"
+                    style={{ backgroundColor: bc.color }}
+                    onClick={() => addBoard(bc.color)}
+                    title={bc.name + ' 보드'}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                      <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 노트 */}
             <div className="add-section">
               <h4>노트</h4>
@@ -576,6 +857,7 @@ function WorkspaceCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDoubleClick={onNodeDoubleClick}
           nodeTypes={nodeTypes}
           fitView
           selectionOnDrag
@@ -591,6 +873,7 @@ function WorkspaceCanvas() {
               if (node.type === 'note') return '#fbbf24'
               if (node.type === 'text') return '#6b7280'
               if (node.type === 'shape') return '#a855f7'
+              if (node.type === 'board') return '#22c55e'
               return '#6b7280'
             }}
           />

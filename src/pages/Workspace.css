@@ -4,6 +4,96 @@
   display: flex;
   flex-direction: row;
   background-color: #fafafa;
+  position: relative;
+}
+
+/* 상단 헤더 (브레드크럼) */
+.workspace-header {
+  position: absolute;
+  top: 0;
+  left: 60px;
+  right: 0;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 100;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-separator {
+  color: #9ca3af;
+  margin: 0 4px;
+  font-size: 14px;
+}
+
+.breadcrumb-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.breadcrumb-link:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.breadcrumb-link.active {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.breadcrumb-link svg {
+  color: #9ca3af;
+}
+
+.workspace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-btn:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
 }
 
 /* 왼쪽 툴바 */
@@ -782,4 +872,90 @@
 .shape-node:hover .react-flow__handle,
 .shape-node.selected .react-flow__handle {
   opacity: 1;
+}
+
+/* 보드 노드 (폴더) */
+.board-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+}
+
+.board-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.board-node.selected {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
+}
+
+.board-node-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.board-node:hover .board-node-icon {
+  transform: scale(1.05);
+}
+
+.board-node-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-node-count {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* 보드 추가 버튼 스타일 */
+.add-board-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-board-btn svg {
+  opacity: 0.9;
+}
+
+.add-board-btn:hover svg {
+  opacity: 1;
+}
+
+/* 캔버스 영역 조정 (헤더 공간 확보) */
+.react-flow-canvas {
+  flex: 1;
+  background-color: #fafafa;
+  padding-top: 48px;
+}
+
+/* 추가 패널 위치 조정 */
+.add-panel {
+  top: 60px;
+}
+
+.ai-panel {
+  top: 60px;
 }
