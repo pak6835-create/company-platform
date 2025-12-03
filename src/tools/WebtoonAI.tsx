@@ -18,7 +18,7 @@ const outputTypes: OutputType[] = [
 function WebtoonAI() {
   const [apiKey, setApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
-  const [model, setModel] = useState('gemini-2.0-flash-exp-image-generation')
+  const [model, setModel] = useState('gemini-2.0-flash-exp')
   const [prompt, setPrompt] = useState('')
   const [referenceImage, setReferenceImage] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -284,8 +284,7 @@ function WebtoonAI() {
           <div className="input-group">
             <label>모델</label>
             <select value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="gemini-2.0-flash-exp-image-generation">Nano Banana (무료)</option>
-              <option value="gemini-2.0-flash-preview-image-generation">Nano Banana Pro (무료)</option>
+              <option value="gemini-2.0-flash-exp">Nano Banana (무료)</option>
             </select>
           </div>
 

@@ -22,7 +22,7 @@ export async function handler(event) {
   }
 
   try {
-    const { prompt, image, apiKey, model = 'gemini-2.0-flash-exp-image-generation' } = JSON.parse(event.body)
+    const { prompt, image, apiKey, model = 'gemini-2.0-flash-exp' } = JSON.parse(event.body)
 
     if (!apiKey) {
       return {
