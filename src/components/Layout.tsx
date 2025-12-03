@@ -27,6 +27,9 @@ function Layout() {
             <Link to="/portfolio" className={`nav-link ${isActive('/portfolio') ? 'active' : ''}`}>
               포트폴리오
             </Link>
+            <Link to="/workspace" className={`nav-link ${isActive('/workspace') ? 'active' : ''}`}>
+              워크스페이스
+            </Link>
             <Link to="/tools" className={`nav-link ${isActive('/tools') ? 'active' : ''}`}>
               도구
             </Link>

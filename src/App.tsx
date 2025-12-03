@@ -8,6 +8,7 @@ import Contact from './pages/Contact'
 import Download from './pages/Download'
 import Blog from './pages/Blog'
 import Admin from './pages/Admin'
+import Workspace from './pages/Workspace'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="blog/:id" element={<Blog />} />
       </Route>
       <Route path="/admin" element={<Admin />} />
+      <Route path="/workspace" element={<Workspace />} />
     </Routes>
   )
 }
