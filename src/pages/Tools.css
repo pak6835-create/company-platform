@@ -1,0 +1,122 @@
+.tools-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 80px 40px;
+}
+
+.tools-header {
+  margin-bottom: 60px;
+}
+
+.tools-header p {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+
+.tools-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.tools-description {
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.tool-card {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 32px;
+  transition: all 0.2s;
+  display: block;
+}
+
+.tool-card:hover:not(.disabled) {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.tool-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tool-number {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.tool-status {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-bottom: 16px;
+  background: var(--primary);
+  color: white;
+  letter-spacing: 0.02em;
+}
+
+.tool-card.disabled .tool-status {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.tool-card h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.tool-card p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.tool-arrow {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  font-size: 1.2rem;
+  color: var(--text-tertiary);
+  transition: transform 0.2s;
+}
+
+.tool-card:hover:not(.disabled) .tool-arrow {
+  transform: translateX(4px);
+  color: var(--primary);
+}
+
+@media (max-width: 1024px) {
+  .tools-page {
+    padding: 60px 24px;
+  }
+
+  .tools-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+}
