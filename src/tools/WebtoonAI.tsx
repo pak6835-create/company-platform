@@ -49,27 +49,44 @@ function WebtoonAI() {
   }
 
   const generateImage = async (promptText: string, inputImage: string | null = null): Promise<string> => {
-    const response = await fetch('/api/gemini/v1beta/models/' + model + ':generateContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: inputImage ? [
-            { text: promptText },
-            { inline_data: { mime_type: 'image/png', data: inputImage.split(',')[1] } }
-          ] : [
-            { text: promptText }
-          ]
-        }],
-        generationConfig: {
-          responseModalities: ['image', 'text'],
-          responseMimeType: 'image/png'
-        }
+    // 환경에 따라 API 엔드포인트 선택
+    const isProduction = window.location.hostname !== 'localhost'
+
+    let response: Response
+
+    if (isProduction) {
+      // Netlify Functions 사용 (배포 환경)
+      response = await fetch('/.netlify/functions/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptText,
+          image: inputImage,
+          apiKey: apiKey,
+          model: model
+        })
       })
-    })
+    } else {
+      // 직접 Gemini API 호출 (로컬 개발)
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: inputImage ? [
+              { text: promptText },
+              { inline_data: { mime_type: 'image/png', data: inputImage.split(',')[1] } }
+            ] : [
+              { text: promptText }
+            ]
+          }],
+          generationConfig: {
+            responseModalities: ['image', 'text'],
+            responseMimeType: 'image/png'
+          }
+        })
+      })
+    }
 
     const data = await response.json()
 
