@@ -63,8 +63,7 @@ export async function handler(event) {
       body: JSON.stringify({
         contents,
         generationConfig: {
-          responseModalities: ['image', 'text'],
-          responseMimeType: 'image/png'
+          responseModalities: ['IMAGE', 'TEXT']
         }
       })
     })
