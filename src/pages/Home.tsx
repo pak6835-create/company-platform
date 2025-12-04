@@ -1,6 +1,94 @@
 import { Link } from 'react-router-dom'
 import { useSite } from '../context/SiteContext'
+import { useEffect, useRef, useState } from 'react'
 import './Home.css'
+
+// Vite base URL (GitHub Pages 경로 지원)
+const BASE_URL = import.meta.env.BASE_URL
+
+// 텍스트 모션 컴포넌트 - 글자가 순차적으로 나타남
+function AnimatedText({ text, delay = 0, className = '' }: { text: string; delay?: number; className?: string }) {
+  const [isVisible, setIsVisible] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => observer.disconnect()
+  }, [])
+
+  // 줄바꿈 처리
+  const lines = text.split('\n')
+  let charIndex = 0
+
+  return (
+    <span ref={ref} className={`animated-text ${className}`}>
+      {lines.map((line, lineIdx) => (
+        <span key={lineIdx} className="animated-line">
+          {line.split('').map((char) => {
+            const currentIndex = charIndex++
+            return (
+              <span
+                key={currentIndex}
+                className={`animated-char ${isVisible ? 'visible' : ''}`}
+                style={{
+                  animationDelay: `${delay + currentIndex * 50}ms`,
+                }}
+              >
+                {char === ' ' ? '\u00A0' : char}
+              </span>
+            )
+          })}
+          {lineIdx < lines.length - 1 && <br />}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// 페이드업 모션 컴포넌트
+function FadeUpText({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const [isVisible, setIsVisible] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className={`fade-up ${isVisible ? 'visible' : ''} ${className}`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  )
+}
 
 const partnerLogos = [
   { name: '네이버웹툰', file: '네이버웹툰.png' },
@@ -156,22 +244,28 @@ function Home() {
     <div className="home">
       {/* 히어로 섹션 */}
       <section className="hero">
-        <div className="hero-bg" style={{ backgroundImage: 'url(/assets/작업사진.jpg)' }} />
+        <div className="hero-bg" style={{ backgroundImage: `url(${BASE_URL}작업사진.jpg)` }} />
         <div className="hero-inner hero-inner-centered">
           <div className="hero-content hero-content-centered">
-            <p className="hero-label">{data.hero.subtitle}</p>
-            <h1>{data.hero.title.split('\n').map((line, i) => (
-              <span key={i}>{line}<br /></span>
-            ))}</h1>
-            <p className="hero-description">
-              {data.hero.description.split('\n').map((line, i) => (
-                <span key={i}>{line}<br /></span>
-              ))}
-            </p>
-            <div className="hero-buttons">
-              <Link to="/contact" className="btn btn-primary">프로젝트 문의</Link>
-              <Link to="/portfolio" className="btn btn-ghost">포트폴리오 보기</Link>
-            </div>
+            <FadeUpText delay={0} className="hero-label-wrapper">
+              <p className="hero-label">{data.hero.subtitle}</p>
+            </FadeUpText>
+            <h1 className="hero-title-animated">
+              <AnimatedText text={data.hero.title} delay={200} />
+            </h1>
+            <FadeUpText delay={800} className="hero-description-wrapper">
+              <p className="hero-description">
+                {data.hero.description.split('\n').map((line, i) => (
+                  <span key={i}>{line}<br /></span>
+                ))}
+              </p>
+            </FadeUpText>
+            <FadeUpText delay={1000} className="hero-buttons-wrapper">
+              <div className="hero-buttons">
+                <Link to="/contact" className="btn btn-primary btn-animated">프로젝트 문의</Link>
+                <Link to="/portfolio" className="btn btn-ghost btn-animated">포트폴리오 보기</Link>
+              </div>
+            </FadeUpText>
           </div>
         </div>
       </section>
@@ -235,7 +329,7 @@ function Home() {
             <div className="partners-slide">
               {[...partnerLogos, ...partnerLogos].map((partner, i) => (
                 <div key={i} className="partner-logo">
-                  <img src={`/assets/partners/${partner.file}`} alt={partner.name} />
+                  <img src={`${BASE_URL}assets/partners/${partner.file}`} alt={partner.name} />
                 </div>
               ))}
             </div>

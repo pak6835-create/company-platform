@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
+// Vite base URL (GitHub Pages 경로 지원)
+const BASE_URL = import.meta.env.BASE_URL
+
 export interface PortfolioItem {
   id: number
   title: string
@@ -51,7 +54,7 @@ const defaultData: SiteData = {
     name: '수요일 오전',
     tagline: 'WEBTOON BACKGROUND STUDIO',
     description: '웹툰 배경 전문 스튜디오',
-    logo: '/assets/logo/logo_light.svg'
+    logo: `${BASE_URL}assets/logo/logo_light.svg`
   },
   hero: {
     title: '웹툰의 세계관을\n완성하는 배경',
@@ -69,30 +72,30 @@ const defaultData: SiteData = {
     }
   },
   portfolio: [
-    { id: 1, title: '작품 1', category: '배경', year: '2024', image: '/assets/portfolio/image1.jpg' },
-    { id: 2, title: '작품 2', category: '배경', year: '2024', image: '/assets/portfolio/image2.png' },
-    { id: 3, title: '작품 3', category: '배경', year: '2024', image: '/assets/portfolio/image3.png' },
-    { id: 4, title: '작품 4', category: '배경', year: '2024', image: '/assets/portfolio/image4.png' },
-    { id: 5, title: '작품 5', category: '배경', year: '2024', image: '/assets/portfolio/image5.jpg' },
-    { id: 6, title: '작품 6', category: '배경', year: '2024', image: '/assets/portfolio/image6.jpg' },
-    { id: 7, title: '작품 7', category: '배경', year: '2023', image: '/assets/portfolio/image7.jpg' },
-    { id: 8, title: '작품 8', category: '배경', year: '2023', image: '/assets/portfolio/image8.png' },
-    { id: 9, title: '작품 9', category: '배경', year: '2023', image: '/assets/portfolio/image9.png' },
-    { id: 10, title: '작품 10', category: '배경', year: '2023', image: '/assets/portfolio/image10.png' },
-    { id: 11, title: '작품 11', category: '배경', year: '2023', image: '/assets/portfolio/image11.jpg' },
-    { id: 12, title: '작품 12', category: '배경', year: '2023', image: '/assets/portfolio/image12.jpg' },
-    { id: 13, title: '작품 13', category: '배경', year: '2022', image: '/assets/portfolio/image13.png' },
-    { id: 14, title: '작품 14', category: '배경', year: '2022', image: '/assets/portfolio/image14.png' },
-    { id: 15, title: '작품 15', category: '배경', year: '2022', image: '/assets/portfolio/image15.png' },
-    { id: 16, title: '작품 16', category: '배경', year: '2022', image: '/assets/portfolio/image16.jpg' },
-    { id: 17, title: '작품 17', category: '배경', year: '2022', image: '/assets/portfolio/image17.jpg' },
-    { id: 18, title: '작품 18', category: '배경', year: '2022', image: '/assets/portfolio/image18.png' },
-    { id: 19, title: '작품 19', category: '배경', year: '2022', image: '/assets/portfolio/image19.png' },
-    { id: 20, title: '작품 20', category: '배경', year: '2022', image: '/assets/portfolio/image20.jpeg' },
-    { id: 21, title: '작품 21', category: '배경', year: '2022', image: '/assets/portfolio/image21.jpeg' },
-    { id: 22, title: '작품 22', category: '배경', year: '2022', image: '/assets/portfolio/image22.jpeg' },
-    { id: 23, title: '작품 23', category: '배경', year: '2022', image: '/assets/portfolio/image23.jpeg' },
-    { id: 24, title: '작품 24', category: '배경', year: '2022', image: '/assets/portfolio/image24.jpg' },
+    { id: 1, title: '작품 1', category: '배경', year: '2024', image: `${BASE_URL}assets/portfolio/image1.jpg` },
+    { id: 2, title: '작품 2', category: '배경', year: '2024', image: `${BASE_URL}assets/portfolio/image2.png` },
+    { id: 3, title: '작품 3', category: '배경', year: '2024', image: `${BASE_URL}assets/portfolio/image3.png` },
+    { id: 4, title: '작품 4', category: '배경', year: '2024', image: `${BASE_URL}assets/portfolio/image4.png` },
+    { id: 5, title: '작품 5', category: '배경', year: '2024', image: `${BASE_URL}assets/portfolio/image5.jpg` },
+    { id: 6, title: '작품 6', category: '배경', year: '2024', image: `${BASE_URL}assets/portfolio/image6.jpg` },
+    { id: 7, title: '작품 7', category: '배경', year: '2023', image: `${BASE_URL}assets/portfolio/image7.jpg` },
+    { id: 8, title: '작품 8', category: '배경', year: '2023', image: `${BASE_URL}assets/portfolio/image8.png` },
+    { id: 9, title: '작품 9', category: '배경', year: '2023', image: `${BASE_URL}assets/portfolio/image9.png` },
+    { id: 10, title: '작품 10', category: '배경', year: '2023', image: `${BASE_URL}assets/portfolio/image10.png` },
+    { id: 11, title: '작품 11', category: '배경', year: '2023', image: `${BASE_URL}assets/portfolio/image11.jpg` },
+    { id: 12, title: '작품 12', category: '배경', year: '2023', image: `${BASE_URL}assets/portfolio/image12.jpg` },
+    { id: 13, title: '작품 13', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image13.png` },
+    { id: 14, title: '작품 14', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image14.png` },
+    { id: 15, title: '작품 15', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image15.png` },
+    { id: 16, title: '작품 16', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image16.jpg` },
+    { id: 17, title: '작품 17', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image17.jpg` },
+    { id: 18, title: '작품 18', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image18.png` },
+    { id: 19, title: '작품 19', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image19.png` },
+    { id: 20, title: '작품 20', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image20.jpeg` },
+    { id: 21, title: '작품 21', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image21.jpeg` },
+    { id: 22, title: '작품 22', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image22.jpeg` },
+    { id: 23, title: '작품 23', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image23.jpeg` },
+    { id: 24, title: '작품 24', category: '배경', year: '2022', image: `${BASE_URL}assets/portfolio/image24.jpg` },
   ],
   blog: [
     {
