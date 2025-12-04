@@ -77,7 +77,6 @@ interface BoardNodeData {
   color?: string
   itemCount?: number
   onNameChange?: (boardId: string, newName: string) => void
-  onNodeDrop?: (targetBoardId: string, nodeId: string) => void
 }
 
 // 커스텀 이미지 노드
@@ -147,16 +146,11 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
   )
 }
 
-// 글로벌 드래그 상태 관리 (노드 간 드래그 앤 드롭)
-let globalDraggedNodeId: string | null = null
-
 // 보드 노드 (심플한 폴더 아이콘) - 더블클릭으로 진입
-function BoardNode({ data, selected, id }: NodeProps<BoardNodeData>) {
+function BoardNode({ data, selected }: NodeProps<BoardNodeData>) {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(data.name || '')
-  const [isDragOver, setIsDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const nodeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -187,46 +181,10 @@ function BoardNode({ data, selected, id }: NodeProps<BoardNodeData>) {
     }
   }
 
-  // 마우스가 보드 위에 있는지 확인
-  useEffect(() => {
-    const node = nodeRef.current
-    if (!node) return
-
-    const handleMouseOver = () => {
-      if (globalDraggedNodeId && globalDraggedNodeId !== id) {
-        setIsDragOver(true)
-      }
-    }
-
-    const handleMouseOut = () => {
-      setIsDragOver(false)
-    }
-
-    const handleMouseUp = () => {
-      if (isDragOver && globalDraggedNodeId && globalDraggedNodeId !== id && data.onNodeDrop) {
-        data.onNodeDrop(data.boardId, globalDraggedNodeId)
-      }
-      setIsDragOver(false)
-    }
-
-    node.addEventListener('mouseover', handleMouseOver)
-    node.addEventListener('mouseout', handleMouseOut)
-    node.addEventListener('mouseup', handleMouseUp)
-
-    return () => {
-      node.removeEventListener('mouseover', handleMouseOver)
-      node.removeEventListener('mouseout', handleMouseOut)
-      node.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [id, data, isDragOver])
-
   return (
-    <div
-      ref={nodeRef}
-      className={`board-node ${selected ? 'selected' : ''} ${isDragOver ? 'drag-over' : ''}`}
-    >
+    <div className={`board-node ${selected ? 'selected' : ''}`}>
       <div className="board-node-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isDragOver ? '#3b82f6' : '#6b7280'} strokeWidth="1.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.5">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       </div>
@@ -383,37 +341,38 @@ function WorkspaceCanvas() {
 
   // 보드 이름 변경 ref (콜백 순환 참조 방지)
   const boardNameChangeRef = useRef<(boardId: string, newName: string) => void>()
-  // 노드를 다른 보드로 이동 ref
-  const nodeMoveRef = useRef<(targetBoardId: string, nodeId: string) => void>()
+  // 이전 보드 ID 추적 (보드 전환 감지용)
+  const prevBoardIdRef = useRef<string | null>(null)
 
-  // 보드 로드 및 보드 노드 개수 업데이트
+  // 보드 로드 (보드 전환 시 또는 초기 로드 시 실행)
   useEffect(() => {
-    if (currentBoard) {
-      // 보드 노드의 itemCount와 onNameChange를 업데이트
-      const updatedNodes = currentBoard.nodes.map(node => {
-        if (node.type === 'board' && node.data.boardId) {
-          const targetBoard = workspaceData.boards[node.data.boardId]
-          const itemCount = targetBoard ? targetBoard.nodes.length : 0
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              itemCount,
-              onNameChange: (boardId: string, newName: string) => {
-                boardNameChangeRef.current?.(boardId, newName)
-              },
-              onNodeDrop: (targetBoardId: string, nodeId: string) => {
-                nodeMoveRef.current?.(targetBoardId, nodeId)
+    // 보드가 전환되었거나 초기 로드일 때만 노드 로드
+    if (prevBoardIdRef.current !== workspaceData.currentBoardId) {
+      prevBoardIdRef.current = workspaceData.currentBoardId
+      if (currentBoard) {
+        // 보드 노드의 itemCount와 콜백 업데이트
+        const updatedNodes = currentBoard.nodes.map(node => {
+          if (node.type === 'board' && node.data.boardId) {
+            const targetBoard = workspaceData.boards[node.data.boardId]
+            const itemCount = targetBoard ? targetBoard.nodes.length : 0
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                itemCount,
+                onNameChange: (boardId: string, newName: string) => {
+                  boardNameChangeRef.current?.(boardId, newName)
+                }
               }
             }
           }
-        }
-        return node
-      })
-      setNodes(updatedNodes)
-      setEdges(currentBoard.edges)
+          return node
+        })
+        setNodes(updatedNodes)
+        setEdges(currentBoard.edges)
+      }
     }
-  }, [workspaceData.currentBoardId, workspaceData.boards, setNodes, setEdges])
+  }, [workspaceData.currentBoardId, currentBoard, workspaceData.boards, setNodes, setEdges])
 
   // 변경사항 저장 (디바운스)
   useEffect(() => {
@@ -471,18 +430,6 @@ function WorkspaceCanvas() {
     }
   }, [navigateToBoard])
 
-  // 노드 드래그 시작 핸들러
-  const onNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
-    globalDraggedNodeId = node.id
-  }, [])
-
-  // 노드 드래그 종료 핸들러
-  const onNodeDragStop = useCallback(() => {
-    // 약간의 딜레이 후 초기화 (드롭 처리를 위해)
-    setTimeout(() => {
-      globalDraggedNodeId = null
-    }, 100)
-  }, [])
 
   // 이미지 생성 함수
   const generateImage = async (promptText: string): Promise<string> => {
@@ -587,9 +534,6 @@ function WorkspaceCanvas() {
         itemCount: 0,
         onNameChange: (id: string, name: string) => {
           boardNameChangeRef.current?.(id, name)
-        },
-        onNodeDrop: (targetBoardId: string, nodeId: string) => {
-          nodeMoveRef.current?.(targetBoardId, nodeId)
         }
       }
     }
@@ -724,64 +668,6 @@ function WorkspaceCanvas() {
     return () => window.removeEventListener('paste', handlePaste)
   }, [addToTray])
 
-  // 노드를 다른 보드로 이동
-  const moveNodeToBoard = useCallback((nodeId: string, targetBoardId: string) => {
-    const node = nodes.find(n => n.id === nodeId)
-    if (!node) return
-
-    // 보드 노드인 경우 자기 자신이나 자식 보드로 이동 불가
-    if (node.type === 'board') {
-      const boardId = (node.data as BoardNodeData).boardId
-      if (boardId === targetBoardId) return
-
-      // 자식 보드인지 확인
-      let currentId: string | null = targetBoardId
-      while (currentId) {
-        if (currentId === boardId) return // 순환 방지
-        currentId = workspaceData.boards[currentId]?.parentId || null
-      }
-
-      // 보드의 parentId 업데이트
-      const board = workspaceData.boards[boardId]
-      if (board) {
-        const updatedBoards = {
-          ...workspaceData.boards,
-          [boardId]: { ...board, parentId: targetBoardId }
-        }
-        const updatedData = { ...workspaceData, boards: updatedBoards }
-        setWorkspaceData(updatedData)
-        saveWorkspaceData(updatedData)
-      }
-    }
-
-    // 현재 보드에서 노드 제거
-    setNodes((nds) => nds.filter(n => n.id !== nodeId))
-
-    // 타겟 보드에 노드 추가
-    const targetBoard = workspaceData.boards[targetBoardId]
-    if (targetBoard) {
-      const updatedNode = {
-        ...node,
-        position: { x: Math.random() * 300 + 100, y: Math.random() * 200 + 100 }
-      }
-      const updatedBoards = {
-        ...workspaceData.boards,
-        [targetBoardId]: {
-          ...targetBoard,
-          nodes: [...targetBoard.nodes, updatedNode],
-          updatedAt: Date.now()
-        }
-      }
-      const updatedData = { ...workspaceData, boards: updatedBoards }
-      setWorkspaceData(updatedData)
-      saveWorkspaceData(updatedData)
-    }
-  }, [nodes, workspaceData, setNodes])
-
-  // nodeMoveRef에 콜백 연결
-  useEffect(() => {
-    nodeMoveRef.current = moveNodeToBoard
-  }, [moveNodeToBoard])
 
   // AI 생성 실행
   const handleGenerate = async () => {
@@ -1178,8 +1064,6 @@ function WorkspaceCanvas() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeDoubleClick={onNodeDoubleClick}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView
           selectionOnDrag
