@@ -55,51 +55,61 @@ function WorkspaceCanvas() {
   const reactFlowInstance = useReactFlow()
 
   // 실행취소/다시실행 히스토리
-  const [history, setHistory] = useState<HistoryState[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
+  const historyRef = useRef<HistoryState[]>([])
+  const historyIndexRef = useRef(-1)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
   const isUndoRedo = useRef(false)
 
   // 클립보드
   const [clipboard, setClipboard] = useState<Node[]>([])
 
   // 히스토리에 현재 상태 저장
-  const saveHistory = useCallback(() => {
+  const saveToHistory = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
     if (isUndoRedo.current) {
       isUndoRedo.current = false
       return
     }
     const newState: HistoryState = {
-      nodes: JSON.parse(JSON.stringify(nodes)),
-      edges: JSON.parse(JSON.stringify(edges)),
+      nodes: JSON.parse(JSON.stringify(currentNodes)),
+      edges: JSON.parse(JSON.stringify(currentEdges)),
     }
-    setHistory((prev) => {
-      const newHistory = prev.slice(0, historyIndex + 1)
-      return [...newHistory, newState].slice(-50) // 최대 50개 히스토리
-    })
-    setHistoryIndex((prev) => Math.min(prev + 1, 49))
-  }, [nodes, edges, historyIndex])
+    const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1)
+    historyRef.current = [...newHistory, newState].slice(-50)
+    historyIndexRef.current = Math.min(historyIndexRef.current + 1, 49)
+    setCanUndo(historyIndexRef.current > 0)
+    setCanRedo(false)
+  }, [])
 
   // 실행취소
   const undo = useCallback(() => {
-    if (historyIndex > 0) {
+    if (historyIndexRef.current > 0) {
       isUndoRedo.current = true
-      const prevState = history[historyIndex - 1]
-      setNodes(prevState.nodes)
-      setEdges(prevState.edges)
-      setHistoryIndex(historyIndex - 1)
+      historyIndexRef.current -= 1
+      const prevState = historyRef.current[historyIndexRef.current]
+      if (prevState) {
+        setNodes(prevState.nodes)
+        setEdges(prevState.edges)
+      }
+      setCanUndo(historyIndexRef.current > 0)
+      setCanRedo(true)
     }
-  }, [history, historyIndex, setNodes, setEdges])
+  }, [setNodes, setEdges])
 
   // 다시실행
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
       isUndoRedo.current = true
-      const nextState = history[historyIndex + 1]
-      setNodes(nextState.nodes)
-      setEdges(nextState.edges)
-      setHistoryIndex(historyIndex + 1)
+      historyIndexRef.current += 1
+      const nextState = historyRef.current[historyIndexRef.current]
+      if (nextState) {
+        setNodes(nextState.nodes)
+        setEdges(nextState.edges)
+      }
+      setCanUndo(true)
+      setCanRedo(historyIndexRef.current < historyRef.current.length - 1)
     }
-  }, [history, historyIndex, setNodes, setEdges])
+  }, [setNodes, setEdges])
 
   // 복사
   const copySelectedNodes = useCallback(() => {
@@ -121,18 +131,18 @@ function WorkspaceCanvas() {
       },
       selected: true,
     }))
-    // 기존 노드 선택 해제
-    setNodes((nds) => [
-      ...nds.map((n) => ({ ...n, selected: false })),
-      ...newNodes,
-    ])
-    saveHistory()
-  }, [clipboard, getNewNodeId, setNodes, saveHistory])
+    setNodes((nds) => {
+      const updated = [
+        ...nds.map((n) => ({ ...n, selected: false })),
+        ...newNodes,
+      ]
+      return updated
+    })
+  }, [clipboard, getNewNodeId, setNodes])
 
   // 키보드 단축키 핸들러
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // input/textarea에서는 무시
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement
@@ -140,12 +150,10 @@ function WorkspaceCanvas() {
         return
       }
 
-      // Ctrl/Cmd + Z: 실행취소
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
       }
-      // Ctrl/Cmd + Shift + Z 또는 Ctrl/Cmd + Y: 다시실행
       if (
         ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') ||
         ((e.ctrlKey || e.metaKey) && e.key === 'y')
@@ -153,17 +161,14 @@ function WorkspaceCanvas() {
         e.preventDefault()
         redo()
       }
-      // Ctrl/Cmd + C: 복사
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         e.preventDefault()
         copySelectedNodes()
       }
-      // Ctrl/Cmd + V: 붙여넣기
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         e.preventDefault()
         pasteNodes()
       }
-      // Ctrl/Cmd + A: 전체선택
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault()
         setNodes((nds) => nds.map((n) => ({ ...n, selected: true })))
@@ -175,12 +180,15 @@ function WorkspaceCanvas() {
   }, [undo, redo, copySelectedNodes, pasteNodes, setNodes])
 
   // 노드/엣지 변경 시 히스토리 저장 (debounce)
+  const lastSaveRef = useRef<string>('')
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (nodes.length > 0 || edges.length > 0) {
-        saveHistory()
+      const stateKey = JSON.stringify({ n: nodes.length, e: edges.length })
+      if (stateKey !== lastSaveRef.current && (nodes.length > 0 || edges.length > 0)) {
+        lastSaveRef.current = stateKey
+        saveToHistory(nodes, edges)
       }
-    }, 500)
+    }, 1000)
     return () => clearTimeout(timer)
   }, [nodes.length, edges.length])
 
@@ -423,10 +431,10 @@ function WorkspaceCanvas() {
         <div className="toolbar-divider" />
 
         <button
-          className={`toolbar-group-button ${historyIndex <= 0 ? 'disabled' : ''}`}
+          className={`toolbar-group-button ${!canUndo ? 'disabled' : ''}`}
           data-tooltip="실행취소 (Ctrl+Z)"
           onClick={undo}
-          disabled={historyIndex <= 0}
+          disabled={!canUndo}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
@@ -434,10 +442,10 @@ function WorkspaceCanvas() {
         </button>
 
         <button
-          className={`toolbar-group-button ${historyIndex >= history.length - 1 ? 'disabled' : ''}`}
+          className={`toolbar-group-button ${!canRedo ? 'disabled' : ''}`}
           data-tooltip="다시실행 (Ctrl+Y)"
           onClick={redo}
-          disabled={historyIndex >= history.length - 1}
+          disabled={!canRedo}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
