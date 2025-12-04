@@ -17,6 +17,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
+  const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
 
   // 연결된 노드 데이터 수집 - 안전하게 접근
   const edges = useStore((s) => s.edges || [])
@@ -87,6 +88,13 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       if (!imagePart) throw new Error('이미지 생성 실패')
 
       const imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
+
+      // 생성된 이미지를 목록에 추가
+      setGeneratedImages((prev) => [
+        { url: imageUrl, prompt: finalPrompt.slice(0, 50) + '...' },
+        ...prev,
+      ].slice(0, 10)) // 최대 10개 유지
+
       if (data.onGenerate) {
         data.onGenerate(imageUrl, finalPrompt.slice(0, 30) + '...')
       }
@@ -186,6 +194,44 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
 
         {!hasConnections && (
           <div className="ai-node-help">💡 프롬프트 빌더나 참조 노드를 연결하세요</div>
+        )}
+
+        {/* 생성된 이미지 갤러리 */}
+        {generatedImages.length > 0 && (
+          <div className="ai-node-gallery">
+            <label>🖼️ 생성된 이미지 ({generatedImages.length})</label>
+            <div className="ai-node-gallery-grid">
+              {generatedImages.map((img, idx) => (
+                <div key={idx} className="ai-node-gallery-item">
+                  <img
+                    src={img.url}
+                    alt={`생성 ${idx + 1}`}
+                    onClick={() => window.open(img.url, '_blank')}
+                    title={img.prompt}
+                  />
+                  <button
+                    className="ai-node-download-btn"
+                    onClick={() => {
+                      const link = document.createElement('a')
+                      link.href = img.url
+                      link.download = `generated-${Date.now()}.png`
+                      link.click()
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    ⬇️
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              className="ai-node-clear-btn"
+              onClick={() => setGeneratedImages([])}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              🗑️ 목록 비우기
+            </button>
+          </div>
         )}
       </div>
 
