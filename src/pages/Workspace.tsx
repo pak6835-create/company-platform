@@ -11,6 +11,7 @@ import ReactFlow, {
   Node,
   Edge,
   Connection,
+  SelectionMode,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import './Workspace.css'
@@ -68,6 +69,14 @@ interface HistoryState {
   edges: Edge[]
 }
 
+// 어셋 라이브러리 타입
+interface Asset {
+  id: string
+  url: string
+  prompt: string
+  timestamp: number
+}
+
 function WorkspaceCanvas() {
   const navigate = useNavigate()
   const {
@@ -91,8 +100,31 @@ function WorkspaceCanvas() {
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [activeTool, setActiveTool] = useState<string>('select')
   const [showTray, setShowTray] = useState(true)
+  const [showAssetLibrary, setShowAssetLibrary] = useState(false)
+  const [assets, setAssets] = useState<Asset[]>(() => {
+    const saved = localStorage.getItem('workspace_assets')
+    return saved ? JSON.parse(saved) : []
+  })
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
+
+  // 어셋 라이브러리 저장
+  useEffect(() => {
+    localStorage.setItem('workspace_assets', JSON.stringify(assets))
+  }, [assets])
+
+  // 어셋 추가 이벤트 리스너
+  useEffect(() => {
+    const handleAssetAdd = (e: Event) => {
+      const { url, prompt, timestamp } = (e as CustomEvent).detail
+      setAssets(prev => [
+        { id: `asset-${timestamp}`, url, prompt, timestamp },
+        ...prev
+      ].slice(0, 50)) // 최대 50개
+    }
+    window.addEventListener('asset-add', handleAssetAdd)
+    return () => window.removeEventListener('asset-add', handleAssetAdd)
+  }, [])
 
   // 실행취소/다시실행 히스토리
   const historyRef = useRef<HistoryState[]>([])
@@ -748,6 +780,10 @@ function WorkspaceCanvas() {
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
+          selectionOnDrag
+          selectionMode={SelectionMode.Partial}
+          panOnDrag={[1, 2]}
+          selectNodesOnDrag
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e5e7eb" />
           <Controls />
@@ -804,6 +840,78 @@ function WorkspaceCanvas() {
         <button className="tray-open-btn" onClick={() => setShowTray(true)}>
           📎 트레이 ({trayItems.length})
         </button>
+      )}
+
+      {/* 어셋 라이브러리 토글 버튼 */}
+      {!showAssetLibrary && (
+        <button
+          className="asset-library-toggle"
+          onClick={() => setShowAssetLibrary(true)}
+          title="어셋 라이브러리"
+        >
+          🖼️
+        </button>
+      )}
+
+      {/* 어셋 라이브러리 패널 */}
+      {showAssetLibrary && (
+        <div className="asset-library-panel">
+          <div className="asset-library-header">
+            <h3>🖼️ 어셋 라이브러리 ({assets.length})</h3>
+            <button onClick={() => setShowAssetLibrary(false)}>✕</button>
+          </div>
+          <div className="asset-library-content">
+            {assets.length === 0 ? (
+              <div className="asset-library-empty">
+                <p>생성된 이미지가 없습니다</p>
+                <p>AI 생성기로 이미지를 만들어보세요!</p>
+              </div>
+            ) : (
+              <div className="asset-library-grid">
+                {assets.map((asset) => (
+                  <div key={asset.id} className="asset-item" title={asset.prompt}>
+                    <img src={asset.url} alt="asset" />
+                    <div className="asset-item-actions">
+                      <button
+                        onClick={() => {
+                          // 캔버스에 이미지 추가
+                          const position = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 }
+                          const newNode: Node = {
+                            id: getNewNodeId(),
+                            type: 'image',
+                            position,
+                            data: { imageUrl: asset.url, label: asset.prompt.slice(0, 20) },
+                            style: { width: 200, height: 200 },
+                          }
+                          setNodes(nds => [...nds, newNode])
+                        }}
+                      >
+                        +추가
+                      </button>
+                      <button
+                        onClick={() => {
+                          const link = document.createElement('a')
+                          link.href = asset.url
+                          link.download = `asset-${asset.timestamp}.png`
+                          link.click()
+                        }}
+                      >
+                        ⬇️
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAssets(prev => prev.filter(a => a.id !== asset.id))
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

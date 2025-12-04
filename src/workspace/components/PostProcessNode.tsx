@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
+import { useState, useEffect, useMemo } from 'react'
+import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
 import { PostProcessNodeData, ProcessType } from '../types'
 import { POSTPROCESS_NODE_CONFIG } from '../config/node-configs'
 
@@ -7,7 +7,41 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
   const [processType, setProcessType] = useState<ProcessType>(data.processType || 'removeBackground')
   const [intensity, setIntensity] = useState(data.intensity || 1.0)
   const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
+  const [inputImage, setInputImage] = useState<string | null>(null)
+  const [outputImage, setOutputImage] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
   const { setNodes } = useReactFlow()
+
+  // 연결된 노드에서 이미지 가져오기
+  const edges = useStore((s) => s.edges || [])
+  const nodes = useStore((s) => s.nodes || [])
+
+  // AI 생성기에서 연결된 이미지 찾기
+  const connectedImage = useMemo(() => {
+    if (!Array.isArray(edges) || !Array.isArray(nodes)) return null
+
+    const sourceEdge = edges.find((e) => e && e.target === id)
+    if (!sourceEdge) return null
+
+    const sourceNode = nodes.find((n) => n && n.id === sourceEdge.source)
+    if (!sourceNode) return null
+
+    // AI 생성기 노드에서 최근 생성 이미지 가져오기
+    if (sourceNode.type === 'aiGenerator') {
+      return sourceNode.data?.lastGeneratedImage || null
+    }
+    // 이미지 노드에서 이미지 가져오기
+    if (sourceNode.type === 'image') {
+      return sourceNode.data?.image || null
+    }
+    return null
+  }, [edges, nodes, id])
+
+  useEffect(() => {
+    if (connectedImage) {
+      setInputImage(connectedImage)
+    }
+  }, [connectedImage])
 
   const defaultConfig = { title: '후처리', color: '#E91E63', options: [] }
   const config = POSTPROCESS_NODE_CONFIG[processType] || POSTPROCESS_NODE_CONFIG.removeBackground || defaultConfig
@@ -102,6 +136,59 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
             </button>
           ))}
         </div>
+
+        {/* 입력 이미지 미리보기 */}
+        {inputImage && (
+          <div className="pp-image-preview">
+            <label>📥 입력 이미지</label>
+            <img src={inputImage} alt="Input" />
+          </div>
+        )}
+
+        {/* 처리 버튼 */}
+        <button
+          className="pp-process-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (!inputImage) return
+            setIsProcessing(true)
+            // 후처리 시뮬레이션 (실제 처리는 별도 API 연동 필요)
+            setTimeout(() => {
+              setOutputImage(inputImage) // 현재는 원본 유지
+              setIsProcessing(false)
+            }, 1000)
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          disabled={!inputImage || isProcessing}
+          style={{ backgroundColor: themeColor }}
+        >
+          {isProcessing ? '처리 중...' : '✨ 후처리 적용'}
+        </button>
+
+        {/* 출력 이미지 미리보기 */}
+        {outputImage && (
+          <div className="pp-image-preview output">
+            <label>📤 출력 이미지</label>
+            <img src={outputImage} alt="Output" />
+            <button
+              className="pp-download-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                const link = document.createElement('a')
+                link.href = outputImage
+                link.download = `processed-${Date.now()}.png`
+                link.click()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              ⬇️ 다운로드
+            </button>
+          </div>
+        )}
+
+        {!inputImage && (
+          <div className="pp-help">💡 AI 생성기나 이미지 노드를 연결하세요</div>
+        )}
       </div>
 
       <Handle type="source" position={Position.Right} id="pp-out" />

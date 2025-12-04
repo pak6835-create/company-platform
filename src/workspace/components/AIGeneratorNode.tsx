@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from 'react'
-import { NodeProps, NodeResizer, Handle, Position, useStore } from 'reactflow'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { NodeProps, NodeResizer, Handle, Position, useStore, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
 // 모델 목록 (나노바나나 = Gemini 이미지 생성 모델 코드명)
@@ -10,6 +10,11 @@ const MODELS = [
   { id: 'gemini-3-pro-image-preview', name: '나노바나나 3 Pro' },
 ]
 
+// 어셋 라이브러리 이벤트 발생 함수
+const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number }) => {
+  window.dispatchEvent(new CustomEvent('asset-add', { detail: asset }))
+}
+
 export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
   const [localApiKey, setLocalApiKey] = useState(data.apiKey || '')
   const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-preview-image-generation')
@@ -18,6 +23,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [error, setError] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
+  const nodeRef = useRef<HTMLDivElement>(null)
+  const { setNodes } = useReactFlow()
 
   // 연결된 노드 데이터 수집 - 안전하게 접근
   const edges = useStore((s) => s.edges || [])
@@ -45,6 +52,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       .map((n) => ({
         type: n?.data?.referenceType || 'unknown',
         hasImage: !!n?.data?.image,
+        image: n?.data?.image || null,
+        strength: n?.data?.strength || 0.8,
       }))
 
     return { connectedSources: sources, connectedPrompts: prompts, connectedRefs: refs }
@@ -58,6 +67,28 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     return parts.join(', ')
   }, [localPrompt, connectedPrompts])
 
+  // 노드 크기 자동 조절
+  const autoResizeNode = useCallback(() => {
+    if (nodeRef.current) {
+      const height = nodeRef.current.scrollHeight + 20
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === id) {
+            return { ...n, style: { ...n.style, height: Math.max(height, 400) } }
+          }
+          return n
+        })
+      )
+    }
+  }, [id, setNodes])
+
+  // 이미지 갤러리가 변경될 때 크기 자동 조절
+  useEffect(() => {
+    if (generatedImages.length > 0) {
+      setTimeout(autoResizeNode, 100)
+    }
+  }, [generatedImages.length, autoResizeNode])
+
   const handleGenerate = async () => {
     const finalPrompt = getFinalPrompt()
     if (!localApiKey || !finalPrompt) {
@@ -70,11 +101,32 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${localModel}:generateContent?key=${localApiKey}`
 
+      // API 요청 파트 구성
+      const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = []
+
+      // 텍스트 프롬프트 추가
+      parts.push({ text: finalPrompt })
+
+      // 연결된 이미지 참조 추가 (Gemini multimodal)
+      const refImages = connectedRefs.filter((ref) => ref.hasImage && ref.image)
+      for (const ref of refImages) {
+        // base64 데이터 추출 (data:image/png;base64, 제거)
+        const base64Data = ref.image.split(',')[1]
+        if (base64Data) {
+          const mimeType = ref.image.split(';')[0].split(':')[1] || 'image/png'
+          parts.push({
+            inlineData: { mimeType, data: base64Data }
+          })
+          // 참조 타입에 따른 추가 프롬프트
+          parts.push({ text: `Use this image as ${ref.type} reference with ${Math.round(ref.strength * 100)}% strength.` })
+        }
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: finalPrompt }] }],
+          contents: [{ parts }],
           generationConfig: { responseModalities: ['Text', 'Image'] },
         }),
       })
@@ -90,10 +142,11 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       const imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
 
       // 생성된 이미지를 목록에 추가
-      setGeneratedImages((prev) => [
-        { url: imageUrl, prompt: finalPrompt.slice(0, 50) + '...' },
-        ...prev,
-      ].slice(0, 10)) // 최대 10개 유지
+      const newImage = { url: imageUrl, prompt: finalPrompt.slice(0, 50) + '...' }
+      setGeneratedImages((prev) => [newImage, ...prev].slice(0, 10))
+
+      // 어셋 라이브러리에 자동 추가
+      emitAssetAdd({ url: imageUrl, prompt: finalPrompt, timestamp: Date.now() })
 
       if (data.onGenerate) {
         data.onGenerate(imageUrl, finalPrompt.slice(0, 30) + '...')
@@ -108,7 +161,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const hasConnections = connectedSources.length > 0
 
   return (
-    <div className={`ai-generator-node ${selected ? 'selected' : ''} ${hasConnections ? 'has-connections' : ''}`}>
+    <div ref={nodeRef} className={`ai-generator-node ${selected ? 'selected' : ''} ${hasConnections ? 'has-connections' : ''}`}>
       <Handle type="target" position={Position.Left} id="prompt-in" />
       <NodeResizer isVisible={selected} minWidth={300} minHeight={200} />
 
