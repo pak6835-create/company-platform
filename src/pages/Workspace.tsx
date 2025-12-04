@@ -9,6 +9,7 @@ import ReactFlow, {
   useEdgesState,
   BackgroundVariant,
   ReactFlowProvider,
+  useReactFlow,
   Node,
   Edge,
   Connection,
@@ -80,6 +81,20 @@ interface BoardNodeData {
   onNameChange?: (boardId: string, newName: string) => void
 }
 
+// AI 생성기 노드 데이터
+interface AIGeneratorNodeData {
+  apiKey?: string
+  model?: string
+  prompt?: string
+  onGenerate?: (imageUrl: string, label: string) => void
+}
+
+// 프롬프트 노드 데이터
+interface PromptBuilderNodeData {
+  combinedPrompt?: string
+  onPromptChange?: (prompt: string) => void
+}
+
 // 커스텀 이미지 노드
 function ImageNode({ data, selected }: NodeProps<ImageNodeData>) {
   return (
@@ -143,6 +158,264 @@ function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       <Handle type="target" position={Position.Top} />
       <NodeResizer isVisible={selected} minWidth={50} minHeight={50} />
       <Handle type="source" position={Position.Bottom} />
+    </div>
+  )
+}
+
+// AI 생성기 노드 (캔버스에 배치되는 카드형)
+function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
+  const [localApiKey, setLocalApiKey] = useState(data.apiKey || '')
+  const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-exp')
+  const [localPrompt, setLocalPrompt] = useState(data.prompt || '')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleGenerate = async () => {
+    if (!localApiKey || !localPrompt) {
+      setError('API 키와 프롬프트를 입력하세요')
+      return
+    }
+    setIsGenerating(true)
+    setError('')
+
+    try {
+      const isProduction = window.location.hostname !== 'localhost'
+      const endpoint = isProduction
+        ? '/.netlify/functions/generate'
+        : `/api/gemini/v1beta/models/${localModel}:generateContent?key=${localApiKey}`
+
+      const body = isProduction
+        ? JSON.stringify({ prompt: localPrompt, apiKey: localApiKey, model: localModel })
+        : JSON.stringify({
+            contents: [{ parts: [{ text: localPrompt }] }],
+            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+          })
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      })
+
+      const result = await response.json()
+      if (result.error) throw new Error(result.error.message || result.error)
+
+      const imagePart = result.candidates?.[0]?.content?.parts?.find(
+        (p: { inlineData?: { data: string } }) => p.inlineData?.data
+      )
+      if (!imagePart) throw new Error('이미지 생성 실패')
+
+      const imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
+      if (data.onGenerate) {
+        data.onGenerate(imageUrl, localPrompt.slice(0, 30) + '...')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '생성 실패')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  return (
+    <div className={`ai-generator-node ${selected ? 'selected' : ''}`}>
+      <Handle type="target" position={Position.Left} id="prompt-in" />
+      <NodeResizer isVisible={selected} minWidth={280} minHeight={200} />
+
+      <div className="ai-node-header">
+        <span>🤖 AI 이미지 생성기</span>
+      </div>
+
+      <div className="ai-node-content">
+        <div className="ai-node-field">
+          <label>API 키</label>
+          <div className="ai-node-input-row">
+            <input
+              type={showApiKey ? 'text' : 'password'}
+              value={localApiKey}
+              onChange={(e) => setLocalApiKey(e.target.value)}
+              placeholder="AIza..."
+            />
+            <button onClick={() => setShowApiKey(!showApiKey)}>
+              {showApiKey ? '숨김' : '보기'}
+            </button>
+          </div>
+        </div>
+
+        <div className="ai-node-field">
+          <label>모델</label>
+          <select value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
+            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+            <option value="gemini-3-pro-image-preview">Gemini 3.0 Pro</option>
+          </select>
+        </div>
+
+        <div className="ai-node-field">
+          <label>프롬프트</label>
+          <textarea
+            value={localPrompt}
+            onChange={(e) => setLocalPrompt(e.target.value)}
+            placeholder="생성할 이미지 설명..."
+            rows={3}
+          />
+        </div>
+
+        {error && <div className="ai-node-error">{error}</div>}
+
+        <button
+          className="ai-node-generate-btn"
+          onClick={handleGenerate}
+          disabled={isGenerating}
+        >
+          {isGenerating ? '⏳ 생성 중...' : '✨ 이미지 생성'}
+        </button>
+      </div>
+
+      <Handle type="source" position={Position.Right} id="image-out" />
+    </div>
+  )
+}
+
+// 프롬프트 빌더 노드 (캔버스에 배치되는 카드형)
+function PromptBuilderNode({ data, selected }: NodeProps<PromptBuilderNodeData>) {
+  const [activeTab, setActiveTab] = useState<'scene' | 'character' | 'props'>('scene')
+  const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string[] }>({})
+  const [userPrompt, setUserPrompt] = useState('')
+
+  // 간소화된 노드 데이터
+  const MINI_NODE_DATA = {
+    scene: {
+      style: { title: '🎨 스타일', options: [
+        { id: 'webtoon', label: '웹툰', prompt: 'webtoon style' },
+        { id: 'anime', label: '애니', prompt: 'anime style' },
+        { id: 'realistic', label: '사실적', prompt: 'realistic' },
+      ]},
+      background: { title: '🏠 배경', options: [
+        { id: 'indoor', label: '실내', prompt: 'indoor scene' },
+        { id: 'outdoor', label: '실외', prompt: 'outdoor scene' },
+        { id: 'city', label: '도시', prompt: 'urban cityscape' },
+      ]},
+      time: { title: '🌅 시간대', options: [
+        { id: 'day', label: '낮', prompt: 'daytime' },
+        { id: 'night', label: '밤', prompt: 'nighttime' },
+        { id: 'sunset', label: '황혼', prompt: 'sunset' },
+      ]},
+    },
+    character: {
+      gender: { title: '👤 성별', options: [
+        { id: 'male', label: '남성', prompt: 'male character' },
+        { id: 'female', label: '여성', prompt: 'female character' },
+      ]},
+      age: { title: '🎂 나이', options: [
+        { id: 'teen', label: '10대', prompt: 'teenager' },
+        { id: '20s', label: '20대', prompt: '20s' },
+        { id: '30s', label: '30대', prompt: '30s' },
+      ]},
+      expression: { title: '😄 표정', options: [
+        { id: 'smile', label: '미소', prompt: 'smiling' },
+        { id: 'serious', label: '진지', prompt: 'serious' },
+        { id: 'angry', label: '화남', prompt: 'angry' },
+      ]},
+    },
+    props: {
+      weapon: { title: '⚔️ 무기', options: [
+        { id: 'sword', label: '검', prompt: 'sword' },
+        { id: 'bow', label: '활', prompt: 'bow' },
+        { id: 'staff', label: '지팡이', prompt: 'magic staff' },
+      ]},
+      item: { title: '📱 아이템', options: [
+        { id: 'phone', label: '폰', prompt: 'smartphone' },
+        { id: 'book', label: '책', prompt: 'book' },
+        { id: 'coffee', label: '커피', prompt: 'coffee cup' },
+      ]},
+    }
+  }
+
+  const currentData = MINI_NODE_DATA[activeTab]
+
+  const toggleOption = (catKey: string, optId: string) => {
+    setSelectedOptions(prev => {
+      const curr = prev[catKey] || []
+      return {
+        ...prev,
+        [catKey]: curr.includes(optId) ? curr.filter(id => id !== optId) : [...curr, optId]
+      }
+    })
+  }
+
+  const getCombinedPrompt = () => {
+    const parts: string[] = []
+    if (userPrompt.trim()) parts.push(userPrompt.trim())
+
+    Object.entries(selectedOptions).forEach(([catKey, optIds]) => {
+      const cat = currentData[catKey as keyof typeof currentData]
+      if (cat) {
+        optIds.forEach(optId => {
+          const opt = cat.options.find(o => o.id === optId)
+          if (opt) parts.push(opt.prompt)
+        })
+      }
+    })
+
+    return parts.join(', ')
+  }
+
+  useEffect(() => {
+    if (data.onPromptChange) {
+      data.onPromptChange(getCombinedPrompt())
+    }
+  }, [selectedOptions, userPrompt, activeTab])
+
+  return (
+    <div className={`prompt-builder-node ${selected ? 'selected' : ''}`}>
+      <NodeResizer isVisible={selected} minWidth={320} minHeight={280} />
+
+      <div className="prompt-node-header">
+        <span>🎨 프롬프트 빌더</span>
+      </div>
+
+      <div className="prompt-node-tabs">
+        <button className={activeTab === 'scene' ? 'active' : ''} onClick={() => setActiveTab('scene')}>장면</button>
+        <button className={activeTab === 'character' ? 'active' : ''} onClick={() => setActiveTab('character')}>캐릭터</button>
+        <button className={activeTab === 'props' ? 'active' : ''} onClick={() => setActiveTab('props')}>소품</button>
+      </div>
+
+      <div className="prompt-node-body">
+        <input
+          type="text"
+          className="prompt-node-input"
+          value={userPrompt}
+          onChange={(e) => setUserPrompt(e.target.value)}
+          placeholder="기본 프롬프트..."
+        />
+
+        <div className="prompt-node-categories">
+          {Object.entries(currentData).map(([catKey, cat]) => (
+            <div key={catKey} className="prompt-mini-category">
+              <span className="prompt-cat-title">{cat.title}</span>
+              <div className="prompt-cat-options">
+                {cat.options.map(opt => (
+                  <button
+                    key={opt.id}
+                    className={`prompt-opt-btn ${(selectedOptions[catKey] || []).includes(opt.id) ? 'active' : ''}`}
+                    onClick={() => toggleOption(catKey, opt.id)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {getCombinedPrompt() && (
+          <div className="prompt-node-preview">
+            <span>📝 {getCombinedPrompt()}</span>
+          </div>
+        )}
+      </div>
+
+      <Handle type="source" position={Position.Right} id="prompt-out" />
     </div>
   )
 }
@@ -221,6 +494,8 @@ const nodeTypes = {
   text: TextNode,
   shape: ShapeNode,
   board: BoardNode,
+  aiGenerator: AIGeneratorNode,
+  promptBuilder: PromptBuilderNode,
 }
 
 // 노트 색상 옵션
@@ -319,6 +594,8 @@ function WorkspaceCanvas() {
   const nodeIdCounter = useRef(Date.now())
   const [showTray, setShowTray] = useState(true)
   const [showNodePanel, setShowNodePanel] = useState(false)
+  const reactFlowWrapper = useRef<HTMLDivElement>(null)
+  const reactFlowInstance = useReactFlow()
 
   // 현재 보드 가져오기
   const currentBoard = workspaceData.boards[workspaceData.currentBoardId]
@@ -555,6 +832,118 @@ function WorkspaceCanvas() {
     saveWorkspaceData(updatedData)
     setShowAddPanel(false)
   }, [workspaceData, setNodes])
+
+  // 드래그 앤 드롭 핸들러
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+
+    const nodeType = event.dataTransfer.getData('application/reactflow-type')
+    const nodeData = event.dataTransfer.getData('application/reactflow-data')
+
+    if (!nodeType || !reactFlowWrapper.current) return
+
+    const bounds = reactFlowWrapper.current.getBoundingClientRect()
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    })
+
+    let newNode: Node
+
+    switch (nodeType) {
+      case 'aiGenerator':
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'aiGenerator',
+          position,
+          data: {
+            onGenerate: (imageUrl: string, label: string) => {
+              addImageToCanvas(imageUrl, label)
+            }
+          }
+        }
+        break
+      case 'promptBuilder':
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'promptBuilder',
+          position,
+          data: {}
+        }
+        break
+      case 'note':
+        const color = nodeData || '#fef3c7'
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'note',
+          position,
+          data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: color }
+        }
+        break
+      case 'text':
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'text',
+          position,
+          data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' }
+        }
+        break
+      case 'shape':
+        const [shape, shapeColor] = (nodeData || 'rectangle,#3b82f6').split(',')
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'shape',
+          position,
+          data: { shape: shape as 'rectangle' | 'circle' | 'triangle', backgroundColor: shapeColor, width: 100, height: 100 }
+        }
+        break
+      case 'board':
+        const boardId = `board-${nodeIdCounter.current++}`
+        const newBoard: Board = {
+          id: boardId,
+          name: '',
+          parentId: workspaceData.currentBoardId,
+          nodes: [],
+          edges: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        newNode = {
+          id: `node-${boardId}`,
+          type: 'board',
+          position,
+          data: {
+            boardId,
+            name: '',
+            itemCount: 0,
+            onNameChange: (id: string, name: string) => {
+              boardNameChangeRef.current?.(id, name)
+            }
+          }
+        }
+        // 보드 데이터 업데이트
+        const updatedData = {
+          ...workspaceData,
+          boards: {
+            ...workspaceData.boards,
+            [boardId]: newBoard
+          }
+        }
+        setWorkspaceData(updatedData)
+        saveWorkspaceData(updatedData)
+        break
+      default:
+        return
+    }
+
+    setNodes((nds) => [...nds, newNode])
+    setShowAddPanel(false)
+  }, [reactFlowInstance, workspaceData, setNodes])
 
   // 보드 이름 변경
   const handleBoardNameChange = useCallback((boardId: string, newName: string) => {
@@ -914,32 +1303,59 @@ function WorkspaceCanvas() {
         </div>
       </div>
 
-      {/* 추가 패널 */}
+      {/* 추가 패널 (드래그 앤 드롭) */}
       {showAddPanel && (
         <div className="add-panel">
           <div className="add-panel-header">
-            <h3>요소 추가</h3>
+            <h3>도구 (드래그하여 배치)</h3>
             <button className="add-panel-close" onClick={() => setShowAddPanel(false)}>×</button>
           </div>
           <div className="add-panel-content">
             {/* AI 도구 */}
             <div className="add-section">
               <h4>AI 도구</h4>
-              <button className="add-item-btn ai-node-btn" onClick={() => { setShowNodePanel(true); setShowAddPanel(false) }}>
-                <span style={{ fontSize: '18px' }}>🎨</span>
-                <span>프롬프트 노드</span>
-              </button>
+              <div className="draggable-items">
+                <div
+                  className="draggable-item ai-generator-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'aiGenerator')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🤖</span>
+                  <span>AI 생성기</span>
+                </div>
+                <div
+                  className="draggable-item prompt-builder-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'promptBuilder')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🎨</span>
+                  <span>프롬프트 빌더</span>
+                </div>
+              </div>
             </div>
 
             {/* 보드 (폴더) */}
             <div className="add-section">
               <h4>보드</h4>
-              <button className="add-item-btn" onClick={addBoard}>
+              <div
+                className="draggable-item board-drag"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/reactflow-type', 'board')
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
                 <span>새 보드</span>
-              </button>
+              </div>
             </div>
 
             {/* 노트 */}
@@ -947,12 +1363,17 @@ function WorkspaceCanvas() {
               <h4>노트</h4>
               <div className="add-color-grid">
                 {noteColors.map((nc) => (
-                  <button
+                  <div
                     key={nc.color}
-                    className="add-color-btn"
+                    className="draggable-color-btn"
                     style={{ backgroundColor: nc.color }}
-                    onClick={() => addNote(nc.color)}
                     title={nc.name}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/reactflow-type', 'note')
+                      e.dataTransfer.setData('application/reactflow-data', nc.color)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
                   />
                 ))}
               </div>
@@ -961,36 +1382,75 @@ function WorkspaceCanvas() {
             {/* 텍스트 */}
             <div className="add-section">
               <h4>텍스트</h4>
-              <button className="add-item-btn" onClick={addText}>
+              <div
+                className="draggable-item text-drag"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/reactflow-type', 'text')
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M4 7V4h16v3M9 20h6M12 4v16" />
                 </svg>
-                <span>텍스트 추가</span>
-              </button>
+                <span>텍스트</span>
+              </div>
             </div>
 
             {/* 도형 */}
             <div className="add-section">
               <h4>도형</h4>
               <div className="add-shape-grid">
-                <button className="add-shape-btn" onClick={() => addShape('rectangle')} title="사각형">
+                <div
+                  className="draggable-shape-btn"
+                  title="사각형"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'shape')
+                    e.dataTransfer.setData('application/reactflow-data', 'rectangle,#3b82f6')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
                   <div className="shape-preview shape-rect" />
-                </button>
-                <button className="add-shape-btn" onClick={() => addShape('circle')} title="원">
+                </div>
+                <div
+                  className="draggable-shape-btn"
+                  title="원"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'shape')
+                    e.dataTransfer.setData('application/reactflow-data', 'circle,#3b82f6')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
                   <div className="shape-preview shape-circle" />
-                </button>
-                <button className="add-shape-btn" onClick={() => addShape('triangle')} title="삼각형">
+                </div>
+                <div
+                  className="draggable-shape-btn"
+                  title="삼각형"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'shape')
+                    e.dataTransfer.setData('application/reactflow-data', 'triangle,#3b82f6')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
                   <div className="shape-preview shape-triangle" />
-                </button>
+                </div>
               </div>
               <div className="add-color-grid">
                 {shapeColors.map((sc) => (
-                  <button
+                  <div
                     key={sc.color}
-                    className="add-color-btn"
+                    className="draggable-color-btn"
                     style={{ backgroundColor: sc.color }}
-                    onClick={() => addShape('rectangle', sc.color)}
                     title={sc.name}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/reactflow-type', 'shape')
+                      e.dataTransfer.setData('application/reactflow-data', `rectangle,${sc.color}`)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
                   />
                 ))}
               </div>
@@ -1073,7 +1533,7 @@ function WorkspaceCanvas() {
       )}
 
       {/* 캔버스 */}
-      <div className="react-flow-canvas">
+      <div className="react-flow-canvas" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -1089,6 +1549,7 @@ function WorkspaceCanvas() {
           selectNodesOnDrag={activeTool === 'select'}
           onDrop={(e) => {
             e.preventDefault()
+            // 트레이 아이템 드롭 처리
             const trayItemId = e.dataTransfer.getData('tray-item-id')
             if (trayItemId) {
               const item = trayItems.find(i => i.id === trayItemId)
@@ -1100,9 +1561,12 @@ function WorkspaceCanvas() {
                 }
                 placeFromTray(item, position)
               }
+              return
             }
+            // 추가 패널에서 드래그한 노드 드롭 처리
+            onDrop(e)
           }}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={onDragOver}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d4d4d8" />
           <Controls />
