@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" log --oneline -10)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" remote -v)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add index.html)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix script path for GitHub Pages deployment\n\nChange absolute path to relative path so Vite correctly resolves the base URL\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" checkout master)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" merge cranky-wright)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add -A)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix React Router basename for GitHub Pages\n\nAdd basename to BrowserRouter to handle /company-platform/ base URL\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
