@@ -1,3 +1,51 @@
+/* 에러 화면 */
+.workspace-error {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #fafafa;
+  gap: 16px;
+}
+
+.workspace-error h2 {
+  color: #dc2626;
+  margin: 0;
+}
+
+.workspace-error p {
+  color: #6b7280;
+  margin: 0;
+}
+
+.workspace-error .error-detail {
+  font-family: monospace;
+  font-size: 12px;
+  background: #fee2e2;
+  padding: 8px 16px;
+  border-radius: 4px;
+  color: #991b1b;
+  max-width: 80%;
+  word-break: break-all;
+}
+
+.workspace-error button {
+  padding: 12px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 16px;
+}
+
+.workspace-error button:hover {
+  background: #2563eb;
+}
+
 .workspace-container {
   width: 100vw;
   height: 100vh;

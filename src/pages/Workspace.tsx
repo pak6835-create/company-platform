@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, Component, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactFlow, {
   Background,
@@ -14,6 +14,46 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import './Workspace.css'
+
+// 에러 바운더리 컴포넌트
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class WorkspaceErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  handleReset = () => {
+    // localStorage 초기화
+    localStorage.removeItem('workspace_data')
+    this.setState({ hasError: false, error: null })
+    window.location.reload()
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="workspace-error">
+          <h2>워크스페이스 로드 오류</h2>
+          <p>저장된 데이터에 문제가 있습니다.</p>
+          <p className="error-detail">{this.state.error?.message}</p>
+          <button onClick={this.handleReset}>
+            데이터 초기화 후 새로고침
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // 워크스페이스 모듈 import
 import { nodeTypes } from '../workspace/components'
@@ -771,8 +811,10 @@ function WorkspaceCanvas() {
 
 export default function Workspace() {
   return (
-    <ReactFlowProvider>
-      <WorkspaceCanvas />
-    </ReactFlowProvider>
+    <WorkspaceErrorBoundary>
+      <ReactFlowProvider>
+        <WorkspaceCanvas />
+      </ReactFlowProvider>
+    </WorkspaceErrorBoundary>
   )
 }

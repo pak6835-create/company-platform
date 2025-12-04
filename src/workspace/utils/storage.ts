@@ -35,11 +35,24 @@ export const loadWorkspaceData = (): WorkspaceData => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       const data = JSON.parse(saved)
+      // 필수 필드 검증
+      if (!data.boards || !data.currentBoardId || !data.boards[data.currentBoardId]) {
+        console.warn('Invalid workspace data, resetting...')
+        localStorage.removeItem(STORAGE_KEY)
+        return createInitialData()
+      }
       if (!data.tray) data.tray = []
+      // 각 보드의 nodes와 edges가 배열인지 확인
+      Object.keys(data.boards).forEach((boardId) => {
+        const board = data.boards[boardId]
+        if (!Array.isArray(board.nodes)) board.nodes = []
+        if (!Array.isArray(board.edges)) board.edges = []
+      })
       return data
     }
   } catch (e) {
     console.error('Failed to load workspace data:', e)
+    localStorage.removeItem(STORAGE_KEY)
   }
   return createInitialData()
 }
