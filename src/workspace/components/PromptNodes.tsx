@@ -11,9 +11,9 @@ function SinglePromptNode({ selected, id, data }: NodeProps<SinglePromptNodeData
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
   const { setNodes } = useReactFlow()
 
-  const nodeData = PROMPT_NODE_DATA[promptType]
-  const themeColor = PROMPT_COLORS[promptType]
-  const title = PROMPT_TITLES[promptType]
+  const nodeData = PROMPT_NODE_DATA[promptType] || PROMPT_NODE_DATA.scene
+  const themeColor = PROMPT_COLORS[promptType] || PROMPT_COLORS.scene
+  const title = PROMPT_TITLES[promptType] || '프롬프트'
 
   const toggleOption = useCallback((catKey: string, optId: string) => {
     setSelectedOptions((prev) => {

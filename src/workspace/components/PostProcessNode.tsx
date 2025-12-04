@@ -9,8 +9,9 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
   const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
   const { setNodes } = useReactFlow()
 
-  const config = POSTPROCESS_NODE_CONFIG[processType] || POSTPROCESS_NODE_CONFIG.removeBackground
-  const themeColor = config.color
+  const defaultConfig = { title: '후처리', color: '#E91E63', options: [] }
+  const config = POSTPROCESS_NODE_CONFIG[processType] || POSTPROCESS_NODE_CONFIG.removeBackground || defaultConfig
+  const themeColor = config?.color || '#E91E63'
 
   useEffect(() => {
     setNodes((nds) =>
@@ -81,7 +82,7 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
         </div>
 
         <div className="pp-options">
-          {config.options.map((opt) => (
+          {(config?.options || []).map((opt) => (
             <button
               key={opt.id}
               className={`pp-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}

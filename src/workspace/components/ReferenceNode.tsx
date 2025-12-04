@@ -12,8 +12,9 @@ export function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeDat
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { setNodes } = useReactFlow()
 
-  const config = REFERENCE_NODE_CONFIG[referenceType] || REFERENCE_NODE_CONFIG.pose
-  const themeColor = config.color
+  const defaultConfig = { title: '이미지 참조', color: '#4CAF50', options: [] }
+  const config = REFERENCE_NODE_CONFIG[referenceType] || REFERENCE_NODE_CONFIG.pose || defaultConfig
+  const themeColor = config?.color || '#4CAF50'
 
   useEffect(() => {
     setNodes((nds) =>
@@ -148,7 +149,7 @@ export function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeDat
         )}
 
         <div className="ref-options">
-          {config.options.map((opt) => (
+          {(config?.options || []).map((opt) => (
             <button
               key={opt.id}
               className={`ref-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}
