@@ -2071,6 +2071,19 @@
   white-space: nowrap;
 }
 
+.connection-item.charmaker-connection {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: #8b5cf6;
+}
+
+.connection-item.charmaker-connection .conn-icon {
+  color: #8b5cf6;
+}
+
+.connection-item.charmaker-connection .conn-status {
+  color: #22c55e;
+}
+
 .ai-node-preview {
   background: #eff6ff;
   border: 1px solid #93c5fd;

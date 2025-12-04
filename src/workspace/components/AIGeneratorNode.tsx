@@ -31,9 +31,9 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const nodes = useStore((s) => s.nodes || [])
 
   // useMemo로 연결 정보 계산 (안전한 접근)
-  const { connectedSources, connectedPrompts, connectedRefs } = useMemo(() => {
+  const { connectedSources, connectedPrompts, connectedRefs, connectedCharMakers } = useMemo(() => {
     if (!Array.isArray(edges) || !Array.isArray(nodes)) {
-      return { connectedSources: [], connectedPrompts: '', connectedRefs: [] }
+      return { connectedSources: [], connectedPrompts: '', connectedRefs: [], connectedCharMakers: [] }
     }
 
     const sources = edges
@@ -41,11 +41,20 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       .map((e) => nodes.find((n) => n && n.id === e.source))
       .filter(Boolean)
 
-    const prompts = sources
-      .filter((n) => n?.type?.startsWith('prompt'))
+    // 프롬프트 노드에서 combinedPrompt 수집
+    const promptNodes = sources.filter((n) => n?.type?.startsWith('prompt'))
+    const promptTexts = promptNodes
       .map((n) => n?.data?.combinedPrompt)
       .filter(Boolean)
-      .join(', ')
+
+    // 캐릭터 메이커 노드에서 combinedPrompt 수집
+    const charMakers = sources.filter((n) => n?.type === 'characterMaker')
+    const charMakerTexts = charMakers
+      .map((n) => n?.data?.combinedPrompt)
+      .filter(Boolean)
+
+    // 모든 프롬프트 합치기
+    const allPrompts = [...promptTexts, ...charMakerTexts].join(', ')
 
     const refs = sources
       .filter((n) => n?.type === 'reference')
@@ -56,7 +65,12 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
         strength: n?.data?.strength || 0.8,
       }))
 
-    return { connectedSources: sources, connectedPrompts: prompts, connectedRefs: refs }
+    return {
+      connectedSources: sources,
+      connectedPrompts: allPrompts,
+      connectedRefs: refs,
+      connectedCharMakers: charMakers
+    }
   }, [edges, nodes, id])
 
   // 최종 프롬프트 생성
@@ -177,7 +191,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
             {connectedSources
               .filter((n) => n?.type?.startsWith('prompt'))
               .map((n, i) => (
-                <div key={i} className="connection-item prompt-connection">
+                <div key={`prompt-${i}`} className="connection-item prompt-connection">
                   <span className="conn-icon">🎨</span>
                   <span className="conn-label">{n?.type?.replace('prompt', '')}</span>
                   <span className="conn-status">{n?.data?.combinedPrompt ? '✓' : '⚠️'}</span>
@@ -186,6 +200,16 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
                   )}
                 </div>
               ))}
+            {connectedCharMakers.map((n, i) => (
+              <div key={`char-${i}`} className="connection-item charmaker-connection">
+                <span className="conn-icon">🎭</span>
+                <span className="conn-label">캐릭터 메이커</span>
+                <span className="conn-status">{n?.data?.combinedPrompt ? '✓' : '⚠️'}</span>
+                {n?.data?.combinedPrompt && (
+                  <div className="conn-preview">{n.data.combinedPrompt.slice(0, 30)}...</div>
+                )}
+              </div>
+            ))}
             {connectedRefs.map((ref, i) => (
               <div key={i} className={`connection-item ref-connection ${ref.hasImage ? 'has-image' : ''}`}>
                 <span className="conn-icon">🖼️</span>
