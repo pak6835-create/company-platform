@@ -36,10 +36,15 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       return { connectedSources: [], connectedPrompts: '', connectedRefs: [], connectedCharMakers: [] }
     }
 
-    const sources = edges
-      .filter((e) => e && e.target === id)
+    // 이 노드를 타겟으로 하는 모든 엣지의 소스 노드 찾기
+    const incomingEdges = edges.filter((e) => e && e.target === id)
+    const sources = incomingEdges
       .map((e) => nodes.find((n) => n && n.id === e.source))
       .filter(Boolean)
+
+    // 디버그: 연결 상태 로깅
+    console.log('[AI Generator] 연결된 엣지:', incomingEdges.length, incomingEdges)
+    console.log('[AI Generator] 연결된 소스 노드:', sources.map(n => ({ type: n?.type, id: n?.id, data: n?.data })))
 
     // 프롬프트 노드에서 combinedPrompt 수집
     const promptNodes = sources.filter((n) => n?.type?.startsWith('prompt'))
@@ -52,6 +57,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     const charMakerTexts = charMakers
       .map((n) => n?.data?.combinedPrompt)
       .filter(Boolean)
+
+    console.log('[AI Generator] 캐릭터 메이커 노드:', charMakers.length, '프롬프트:', charMakerTexts)
 
     // 모든 프롬프트 합치기
     const allPrompts = [...promptTexts, ...charMakerTexts].join(', ')
