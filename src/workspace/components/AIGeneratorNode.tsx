@@ -2,6 +2,13 @@ import { useState, useCallback, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useStore } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
+// 프리셋 모델 목록
+const PRESET_MODELS = [
+  { id: 'gemini-2.0-flash-exp-image-generation', name: 'Gemini 2.0 Flash Exp' },
+  { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash Preview' },
+  { id: 'gemini-exp-image-generation', name: 'Gemini Exp' },
+]
+
 export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
   const [localApiKey, setLocalApiKey] = useState(data.apiKey || '')
   const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-exp-image-generation')
@@ -9,6 +16,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
+  const [useCustomModel, setUseCustomModel] = useState(false)
+  const [customModelId, setCustomModelId] = useState('')
 
   // 연결된 노드 데이터 수집 - 안전하게 접근
   const edges = useStore((s) => s.edges || [])
@@ -139,10 +148,44 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
         </div>
 
         <div className="ai-node-field">
-          <label>모델</label>
-          <select className="nodrag" value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
-            <option value="gemini-2.0-flash-exp-image-generation">Gemini 2.0 Flash (이미지)</option>
-          </select>
+          <label>
+            모델
+            <button
+              type="button"
+              className="nodrag"
+              onClick={() => setUseCustomModel(!useCustomModel)}
+              style={{
+                marginLeft: '8px',
+                padding: '2px 6px',
+                fontSize: '11px',
+                background: useCustomModel ? '#3b82f6' : '#e5e7eb',
+                color: useCustomModel ? '#fff' : '#666',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              {useCustomModel ? '프리셋' : '직접입력'}
+            </button>
+          </label>
+          {useCustomModel ? (
+            <input
+              className="nodrag"
+              type="text"
+              value={customModelId}
+              onChange={(e) => {
+                setCustomModelId(e.target.value)
+                setLocalModel(e.target.value)
+              }}
+              placeholder="모델 ID (예: gemini-2.0-flash-exp-image-generation)"
+            />
+          ) : (
+            <select className="nodrag" value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
+              {PRESET_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="ai-node-field">
