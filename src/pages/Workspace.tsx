@@ -17,10 +17,12 @@ import ReactFlow, {
   Handle,
   Position,
   NodeProps,
+  useStore,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import './Workspace.css'
 import PromptNodePanel from '../components/nodes/PromptNodePanel'
+import { SCENE_NODE_DATA, CHARACTER_NODE_DATA, PROPS_NODE_DATA, NODE_COLORS } from '../components/nodes/node-data'
 
 // 타입 정의
 interface Board {
@@ -87,6 +89,9 @@ interface AIGeneratorNodeData {
   model?: string
   prompt?: string
   onGenerate?: (imageUrl: string, label: string) => void
+  // 연결된 노드에서 받은 데이터
+  connectedPrompt?: string
+  connectedReferences?: { type: string; image: string; strength: number }[]
 }
 
 // 프롬프트 노드 데이터
@@ -111,11 +116,22 @@ interface PostProcessNodeData {
 }
 
 // 커스텀 이미지 노드
-function ImageNode({ data, selected }: NodeProps<ImageNodeData>) {
+function ImageNode({ data, selected, id }: NodeProps<ImageNodeData>) {
+  const { setNodes } = useReactFlow()
+
+  const onResize = useCallback((_event: unknown, params: { width: number; height: number }) => {
+    setNodes(nds => nds.map(n => {
+      if (n.id === id) {
+        return { ...n, data: { ...n.data, width: params.width, height: params.height } }
+      }
+      return n
+    }))
+  }, [id, setNodes])
+
   return (
-    <div className={`image-node ${selected ? 'selected' : ''}`} style={{ width: data.width || 300, height: data.height || 200 }}>
-      <Handle type="target" position={Position.Top} />
-      <NodeResizer isVisible={selected} minWidth={100} minHeight={100} keepAspectRatio />
+    <div className={`image-node ${selected ? 'selected' : ''}`} style={{ width: '100%', height: '100%' }}>
+      <Handle type="target" position={Position.Left} />
+      <NodeResizer isVisible={selected} minWidth={100} minHeight={100} keepAspectRatio onResize={onResize} />
       <div className="image-content">
         {data.imageUrl ? (
           <img src={data.imageUrl} alt={data.label} className="image-thumbnail" draggable={false} />
@@ -124,7 +140,7 @@ function ImageNode({ data, selected }: NodeProps<ImageNodeData>) {
         )}
       </div>
       <div className="image-label">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Right} />
     </div>
   )
 }
@@ -132,11 +148,11 @@ function ImageNode({ data, selected }: NodeProps<ImageNodeData>) {
 // 커스텀 노트 노드
 function NoteNode({ data, selected }: NodeProps<NoteNodeData>) {
   return (
-    <div className={`note-node ${selected ? 'selected' : ''}`} style={{ backgroundColor: data.backgroundColor || '#fef3c7' }}>
-      <Handle type="target" position={Position.Top} />
+    <div className={`note-node ${selected ? 'selected' : ''}`} style={{ backgroundColor: data.backgroundColor || '#fef3c7', width: '100%', height: '100%' }}>
+      <Handle type="target" position={Position.Left} />
       <NodeResizer isVisible={selected} minWidth={150} minHeight={100} />
       <div className="note-content">{data.content}</div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Right} />
     </div>
   )
 }
@@ -144,8 +160,8 @@ function NoteNode({ data, selected }: NodeProps<NoteNodeData>) {
 // 텍스트 노드
 function TextNode({ data, selected }: NodeProps<TextNodeData>) {
   return (
-    <div className={`text-node ${selected ? 'selected' : ''}`}>
-      <Handle type="target" position={Position.Top} />
+    <div className={`text-node ${selected ? 'selected' : ''}`} style={{ width: '100%', height: '100%' }}>
+      <Handle type="target" position={Position.Left} />
       <NodeResizer isVisible={selected} minWidth={50} minHeight={30} />
       <div
         className="text-content"
@@ -153,32 +169,43 @@ function TextNode({ data, selected }: NodeProps<TextNodeData>) {
       >
         {data.text}
       </div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Right} />
     </div>
   )
 }
 
 // 도형 노드
-function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
+function ShapeNode({ data, selected, id }: NodeProps<ShapeNodeData>) {
   const shapeClass = `shape-node shape-${data.shape}`
+  const { setNodes } = useReactFlow()
+
+  const onResize = useCallback((_event: unknown, params: { width: number; height: number }) => {
+    setNodes(nds => nds.map(n => {
+      if (n.id === id) {
+        return { ...n, data: { ...n.data, width: params.width, height: params.height } }
+      }
+      return n
+    }))
+  }, [id, setNodes])
+
   return (
     <div
       className={`${shapeClass} ${selected ? 'selected' : ''}`}
       style={{
         backgroundColor: data.backgroundColor || '#3b82f6',
-        width: data.width || 100,
-        height: data.height || 100
+        width: '100%',
+        height: '100%'
       }}
     >
-      <Handle type="target" position={Position.Top} />
-      <NodeResizer isVisible={selected} minWidth={50} minHeight={50} />
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" position={Position.Left} />
+      <NodeResizer isVisible={selected} minWidth={50} minHeight={50} onResize={onResize} />
+      <Handle type="source" position={Position.Right} />
     </div>
   )
 }
 
-// AI 생성기 노드 (캔버스에 배치되는 카드형)
-function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
+// AI 생성기 노드 (캔버스에 배치되는 카드형) - 연결 기능 포함
+function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
   const [localApiKey, setLocalApiKey] = useState(data.apiKey || '')
   const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-exp')
   const [localPrompt, setLocalPrompt] = useState(data.prompt || '')
@@ -186,8 +213,46 @@ function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
   const [showApiKey, setShowApiKey] = useState(false)
   const [error, setError] = useState('')
 
+  // ReactFlow에서 edges와 nodes 가져오기
+  const edges = useStore((state) => state.edges)
+  const nodes = useStore((state) => state.nodes)
+
+  // 이 노드에 연결된 소스 노드들 찾기
+  const connectedSources = edges
+    .filter(edge => edge.target === id)
+    .map(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source)
+      return sourceNode
+    })
+    .filter(Boolean)
+
+  // 연결된 프롬프트 빌더에서 프롬프트 가져오기
+  const connectedPrompts = connectedSources
+    .filter(node => node?.type === 'promptBuilder')
+    .map(node => node?.data?.combinedPrompt)
+    .filter(Boolean)
+    .join(', ')
+
+  // 연결된 참조 노드들
+  const connectedRefs = connectedSources
+    .filter(node => node?.type === 'reference')
+    .map(node => ({
+      type: node?.data?.referenceType,
+      hasImage: !!node?.data?.image,
+      strength: node?.data?.strength || 0.8,
+    }))
+
+  // 최종 프롬프트 (직접 입력 + 연결된 프롬프트)
+  const getFinalPrompt = () => {
+    const parts = []
+    if (localPrompt.trim()) parts.push(localPrompt.trim())
+    if (connectedPrompts) parts.push(connectedPrompts)
+    return parts.join(', ')
+  }
+
   const handleGenerate = async () => {
-    if (!localApiKey || !localPrompt) {
+    const finalPrompt = getFinalPrompt()
+    if (!localApiKey || !finalPrompt) {
       setError('API 키와 프롬프트를 입력하세요')
       return
     }
@@ -201,9 +266,9 @@ function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
         : `/api/gemini/v1beta/models/${localModel}:generateContent?key=${localApiKey}`
 
       const body = isProduction
-        ? JSON.stringify({ prompt: localPrompt, apiKey: localApiKey, model: localModel })
+        ? JSON.stringify({ prompt: finalPrompt, apiKey: localApiKey, model: localModel })
         : JSON.stringify({
-            contents: [{ parts: [{ text: localPrompt }] }],
+            contents: [{ parts: [{ text: finalPrompt }] }],
             generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
           })
 
@@ -223,7 +288,7 @@ function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
 
       const imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
       if (data.onGenerate) {
-        data.onGenerate(imageUrl, localPrompt.slice(0, 30) + '...')
+        data.onGenerate(imageUrl, finalPrompt.slice(0, 30) + '...')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '생성 실패')
@@ -232,16 +297,40 @@ function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
     }
   }
 
+  const hasConnections = connectedSources.length > 0
+
   return (
-    <div className={`ai-generator-node ${selected ? 'selected' : ''}`}>
+    <div className={`ai-generator-node ${selected ? 'selected' : ''} ${hasConnections ? 'has-connections' : ''}`}>
       <Handle type="target" position={Position.Left} id="prompt-in" />
-      <NodeResizer isVisible={selected} minWidth={280} minHeight={200} />
+      <NodeResizer isVisible={selected} minWidth={300} minHeight={200} />
 
       <div className="ai-node-header">
         <span>🤖 AI 이미지 생성기</span>
+        {hasConnections && <span className="connection-badge">🔗 {connectedSources.length}</span>}
       </div>
 
       <div className="ai-node-content">
+        {/* 연결 상태 표시 */}
+        {hasConnections && (
+          <div className="ai-node-connections">
+            <div className="connections-title">📥 연결된 노드:</div>
+            {connectedPrompts && (
+              <div className="connection-item prompt-connection">
+                <span className="conn-icon">🎨</span>
+                <span className="conn-label">프롬프트 빌더</span>
+                <span className="conn-status">✓</span>
+              </div>
+            )}
+            {connectedRefs.map((ref, i) => (
+              <div key={i} className={`connection-item ref-connection ${ref.hasImage ? 'has-image' : ''}`}>
+                <span className="conn-icon">🖼️</span>
+                <span className="conn-label">{ref.type} 참조</span>
+                <span className="conn-status">{ref.hasImage ? '✓' : '⚠️'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="ai-node-field">
           <label>API 키</label>
           <div className="ai-node-input-row">
@@ -266,24 +355,38 @@ function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
         </div>
 
         <div className="ai-node-field">
-          <label>프롬프트</label>
+          <label>추가 프롬프트 {connectedPrompts && '(연결됨)'}</label>
           <textarea
             value={localPrompt}
             onChange={(e) => setLocalPrompt(e.target.value)}
-            placeholder="생성할 이미지 설명..."
-            rows={3}
+            placeholder={connectedPrompts ? "연결된 프롬프트에 추가할 내용..." : "생성할 이미지 설명..."}
+            rows={2}
           />
         </div>
+
+        {/* 최종 프롬프트 미리보기 */}
+        {getFinalPrompt() && (
+          <div className="ai-node-preview">
+            <label>📝 최종 프롬프트</label>
+            <p>{getFinalPrompt().length > 100 ? getFinalPrompt().slice(0, 100) + '...' : getFinalPrompt()}</p>
+          </div>
+        )}
 
         {error && <div className="ai-node-error">{error}</div>}
 
         <button
           className="ai-node-generate-btn"
           onClick={handleGenerate}
-          disabled={isGenerating}
+          disabled={isGenerating || !getFinalPrompt()}
         >
           {isGenerating ? '⏳ 생성 중...' : '✨ 이미지 생성'}
         </button>
+
+        {!hasConnections && (
+          <div className="ai-node-help">
+            💡 왼쪽 핸들에 프롬프트 빌더나 참조 노드를 연결하세요
+          </div>
+        )}
       </div>
 
       <Handle type="source" position={Position.Right} id="image-out" />
@@ -291,108 +394,103 @@ function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
   )
 }
 
-// 프롬프트 빌더 노드 (캔버스에 배치되는 카드형)
-function PromptBuilderNode({ data, selected }: NodeProps<PromptBuilderNodeData>) {
+// 프롬프트 빌더 노드 (캔버스에 배치되는 카드형) - 전체 데이터 사용
+function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeData>) {
   const [activeTab, setActiveTab] = useState<'scene' | 'character' | 'props'>('scene')
   const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string[] }>({})
   const [userPrompt, setUserPrompt] = useState('')
+  const { setNodes } = useReactFlow()
 
-  // 간소화된 노드 데이터
-  const MINI_NODE_DATA = {
-    scene: {
-      style: { title: '🎨 스타일', options: [
-        { id: 'webtoon', label: '웹툰', prompt: 'webtoon style' },
-        { id: 'anime', label: '애니', prompt: 'anime style' },
-        { id: 'realistic', label: '사실적', prompt: 'realistic' },
-      ]},
-      background: { title: '🏠 배경', options: [
-        { id: 'indoor', label: '실내', prompt: 'indoor scene' },
-        { id: 'outdoor', label: '실외', prompt: 'outdoor scene' },
-        { id: 'city', label: '도시', prompt: 'urban cityscape' },
-      ]},
-      time: { title: '🌅 시간대', options: [
-        { id: 'day', label: '낮', prompt: 'daytime' },
-        { id: 'night', label: '밤', prompt: 'nighttime' },
-        { id: 'sunset', label: '황혼', prompt: 'sunset' },
-      ]},
-    },
-    character: {
-      gender: { title: '👤 성별', options: [
-        { id: 'male', label: '남성', prompt: 'male character' },
-        { id: 'female', label: '여성', prompt: 'female character' },
-      ]},
-      age: { title: '🎂 나이', options: [
-        { id: 'teen', label: '10대', prompt: 'teenager' },
-        { id: '20s', label: '20대', prompt: '20s' },
-        { id: '30s', label: '30대', prompt: '30s' },
-      ]},
-      expression: { title: '😄 표정', options: [
-        { id: 'smile', label: '미소', prompt: 'smiling' },
-        { id: 'serious', label: '진지', prompt: 'serious' },
-        { id: 'angry', label: '화남', prompt: 'angry' },
-      ]},
-    },
-    props: {
-      weapon: { title: '⚔️ 무기', options: [
-        { id: 'sword', label: '검', prompt: 'sword' },
-        { id: 'bow', label: '활', prompt: 'bow' },
-        { id: 'staff', label: '지팡이', prompt: 'magic staff' },
-      ]},
-      item: { title: '📱 아이템', options: [
-        { id: 'phone', label: '폰', prompt: 'smartphone' },
-        { id: 'book', label: '책', prompt: 'book' },
-        { id: 'coffee', label: '커피', prompt: 'coffee cup' },
-      ]},
-    }
+  // 기존 node-data.ts의 풍부한 데이터 사용
+  const FULL_NODE_DATA = {
+    scene: SCENE_NODE_DATA,
+    character: CHARACTER_NODE_DATA,
+    props: PROPS_NODE_DATA,
   }
 
-  const currentData = MINI_NODE_DATA[activeTab]
+  const currentData = FULL_NODE_DATA[activeTab]
+  const themeColor = NODE_COLORS[activeTab]
 
   const toggleOption = (catKey: string, optId: string) => {
     setSelectedOptions(prev => {
       const curr = prev[catKey] || []
-      return {
+      const newSelected = {
         ...prev,
-        [catKey]: curr.includes(optId) ? curr.filter(id => id !== optId) : [...curr, optId]
+        [catKey]: curr.includes(optId) ? curr.filter(i => i !== optId) : [...curr, optId]
       }
+      return newSelected
     })
   }
 
-  const getCombinedPrompt = () => {
+  // 모든 탭에서 선택된 옵션으로 프롬프트 조합
+  const getCombinedPrompt = useCallback(() => {
     const parts: string[] = []
     if (userPrompt.trim()) parts.push(userPrompt.trim())
 
-    Object.entries(selectedOptions).forEach(([catKey, optIds]) => {
-      const cat = currentData[catKey as keyof typeof currentData]
-      if (cat) {
-        optIds.forEach(optId => {
-          const opt = cat.options.find(o => o.id === optId)
+    // 모든 탭의 데이터를 순회
+    Object.entries(FULL_NODE_DATA).forEach(([, tabData]) => {
+      Object.entries(tabData).forEach(([catKey, category]) => {
+        const selectedIds = selectedOptions[catKey] || []
+        selectedIds.forEach(optId => {
+          const opt = category.options.find(o => o.id === optId)
           if (opt) parts.push(opt.prompt)
         })
-      }
+      })
     })
 
     return parts.join(', ')
+  }, [selectedOptions, userPrompt])
+
+  // 선택된 총 옵션 수
+  const totalSelected = Object.values(selectedOptions).reduce((sum, arr) => sum + arr.length, 0)
+
+  // 프롬프트가 변경될 때마다 노드 데이터 업데이트
+  useEffect(() => {
+    const prompt = getCombinedPrompt()
+    setNodes(nds => nds.map(n => {
+      if (n.id === id) {
+        return { ...n, data: { ...n.data, combinedPrompt: prompt } }
+      }
+      return n
+    }))
+  }, [selectedOptions, userPrompt, id, setNodes, getCombinedPrompt])
+
+  const handleClear = () => {
+    setSelectedOptions({})
+    setUserPrompt('')
   }
 
-  useEffect(() => {
-    if (data.onPromptChange) {
-      data.onPromptChange(getCombinedPrompt())
-    }
-  }, [selectedOptions, userPrompt, activeTab])
-
   return (
-    <div className={`prompt-builder-node ${selected ? 'selected' : ''}`}>
-      <NodeResizer isVisible={selected} minWidth={320} minHeight={280} />
+    <div className={`prompt-builder-node ${selected ? 'selected' : ''}`} style={{ '--prompt-color': themeColor } as React.CSSProperties}>
+      <NodeResizer isVisible={selected} minWidth={340} minHeight={320} />
 
-      <div className="prompt-node-header">
+      <div className="prompt-node-header" style={{ background: `linear-gradient(135deg, ${themeColor} 0%, ${themeColor}dd 100%)` }}>
         <span>🎨 프롬프트 빌더</span>
+        <span className="prompt-header-count">{totalSelected}개 선택</span>
       </div>
 
       <div className="prompt-node-tabs">
-        <button className={activeTab === 'scene' ? 'active' : ''} onClick={() => setActiveTab('scene')}>장면</button>
-        <button className={activeTab === 'character' ? 'active' : ''} onClick={() => setActiveTab('character')}>캐릭터</button>
-        <button className={activeTab === 'props' ? 'active' : ''} onClick={() => setActiveTab('props')}>소품</button>
+        <button
+          className={activeTab === 'scene' ? 'active' : ''}
+          onClick={() => setActiveTab('scene')}
+          style={{ '--tab-color': NODE_COLORS.scene } as React.CSSProperties}
+        >
+          🎬 장면
+        </button>
+        <button
+          className={activeTab === 'character' ? 'active' : ''}
+          onClick={() => setActiveTab('character')}
+          style={{ '--tab-color': NODE_COLORS.character } as React.CSSProperties}
+        >
+          🧑 캐릭터
+        </button>
+        <button
+          className={activeTab === 'props' ? 'active' : ''}
+          onClick={() => setActiveTab('props')}
+          style={{ '--tab-color': NODE_COLORS.props } as React.CSSProperties}
+        >
+          🎒 소품
+        </button>
       </div>
 
       <div className="prompt-node-body">
@@ -401,33 +499,53 @@ function PromptBuilderNode({ data, selected }: NodeProps<PromptBuilderNodeData>)
           className="prompt-node-input"
           value={userPrompt}
           onChange={(e) => setUserPrompt(e.target.value)}
-          placeholder="기본 프롬프트..."
+          placeholder="기본 프롬프트 입력..."
         />
 
         <div className="prompt-node-categories">
-          {Object.entries(currentData).map(([catKey, cat]) => (
+          {Object.entries(currentData).map(([catKey, category]) => (
             <div key={catKey} className="prompt-mini-category">
-              <span className="prompt-cat-title">{cat.title}</span>
+              <div className="prompt-cat-header">
+                <span className="prompt-cat-title">{category.title}</span>
+                <span className="prompt-cat-count">{(selectedOptions[catKey] || []).length}개</span>
+              </div>
               <div className="prompt-cat-options">
-                {cat.options.map(opt => (
-                  <button
-                    key={opt.id}
-                    className={`prompt-opt-btn ${(selectedOptions[catKey] || []).includes(opt.id) ? 'active' : ''}`}
-                    onClick={() => toggleOption(catKey, opt.id)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                {category.options.map(opt => {
+                  const isSelected = (selectedOptions[catKey] || []).includes(opt.id)
+                  return (
+                    <button
+                      key={opt.id}
+                      className={`prompt-opt-btn ${isSelected ? 'active' : ''}`}
+                      onClick={() => toggleOption(catKey, opt.id)}
+                      style={{
+                        borderColor: isSelected ? themeColor : '#ddd',
+                        backgroundColor: isSelected ? `${themeColor}15` : '#fff',
+                        color: isSelected ? themeColor : '#666',
+                      }}
+                    >
+                      {isSelected && <span className="check-mark">✓</span>}
+                      {opt.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ))}
         </div>
 
         {getCombinedPrompt() && (
-          <div className="prompt-node-preview">
-            <span>📝 {getCombinedPrompt()}</span>
+          <div className="prompt-node-preview" style={{ borderLeftColor: themeColor }}>
+            <div className="preview-header">
+              <span style={{ color: themeColor }}>📝 조합된 프롬프트</span>
+              <button className="clear-btn" onClick={handleClear}>초기화</button>
+            </div>
+            <p className="preview-text">{getCombinedPrompt()}</p>
           </div>
         )}
+
+        <div className="prompt-node-help">
+          💡 AI 생성기 노드의 왼쪽 핸들에 연결하세요
+        </div>
       </div>
 
       <Handle type="source" position={Position.Right} id="prompt-out" />
@@ -470,19 +588,30 @@ const REFERENCE_NODE_CONFIG = {
 }
 
 // 참조 노드 컴포넌트
-function ReferenceNode({ data, selected }: NodeProps<ReferenceNodeData>) {
+function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
   const [image, setImage] = useState(data.image || '')
   const [strength, setStrength] = useState(data.strength || 0.8)
   const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { setNodes } = useReactFlow()
 
   const config = REFERENCE_NODE_CONFIG[data.referenceType] || REFERENCE_NODE_CONFIG.pose
   const themeColor = config.color
 
+  // 데이터가 변경될 때마다 노드에 저장
+  useEffect(() => {
+    setNodes(nds => nds.map(n => {
+      if (n.id === id) {
+        return { ...n, data: { ...n.data, image, strength, selectedOptions } }
+      }
+      return n
+    }))
+  }, [image, strength, selectedOptions, id, setNodes])
+
   const toggleOption = (optId: string) => {
     setSelectedOptions(prev =>
-      prev.includes(optId) ? prev.filter(id => id !== optId) : [...prev, optId]
+      prev.includes(optId) ? prev.filter(i => i !== optId) : [...prev, optId]
     )
   }
 
@@ -580,6 +709,10 @@ function ReferenceNode({ data, selected }: NodeProps<ReferenceNodeData>) {
               {selectedOptions.includes(opt.id) && '✓ '}{opt.label}
             </button>
           ))}
+        </div>
+
+        <div className="ref-node-help">
+          💡 오른쪽 핸들을 AI 생성기에 연결하세요
         </div>
       </div>
 
@@ -1018,7 +1151,8 @@ function WorkspaceCanvas() {
       id: String(nodeIdCounter.current++),
       type: 'image',
       position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { imageUrl, label, width: 300, height: 300 }
+      data: { imageUrl, label, width: 300, height: 300 },
+      style: { width: 300, height: 300 }
     }
     setNodes((nds) => [...nds, newNode])
   }
@@ -1028,7 +1162,8 @@ function WorkspaceCanvas() {
       id: String(nodeIdCounter.current++),
       type: 'note',
       position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: color }
+      data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: color },
+      style: { width: 200, height: 150 }
     }
     setNodes((nds) => [...nds, newNode])
     setShowAddPanel(false)
@@ -1039,7 +1174,8 @@ function WorkspaceCanvas() {
       id: String(nodeIdCounter.current++),
       type: 'text',
       position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' }
+      data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' },
+      style: { width: 150, height: 50 }
     }
     setNodes((nds) => [...nds, newNode])
     setShowAddPanel(false)
@@ -1050,7 +1186,8 @@ function WorkspaceCanvas() {
       id: String(nodeIdCounter.current++),
       type: 'shape',
       position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { shape, backgroundColor: color, width: 100, height: 100 }
+      data: { shape, backgroundColor: color, width: 100, height: 100 },
+      style: { width: 100, height: 100 }
     }
     setNodes((nds) => [...nds, newNode])
     setShowAddPanel(false)
@@ -1134,7 +1271,8 @@ function WorkspaceCanvas() {
             onGenerate: (imageUrl: string, label: string) => {
               addImageToCanvas(imageUrl, label)
             }
-          }
+          },
+          style: { width: 320, height: 400 }
         }
         break
       case 'promptBuilder':
@@ -1142,7 +1280,8 @@ function WorkspaceCanvas() {
           id: String(nodeIdCounter.current++),
           type: 'promptBuilder',
           position,
-          data: {}
+          data: {},
+          style: { width: 360, height: 450 }
         }
         break
       case 'note':
@@ -1151,7 +1290,8 @@ function WorkspaceCanvas() {
           id: String(nodeIdCounter.current++),
           type: 'note',
           position,
-          data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: color }
+          data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: color },
+          style: { width: 200, height: 150 }
         }
         break
       case 'text':
@@ -1159,7 +1299,8 @@ function WorkspaceCanvas() {
           id: String(nodeIdCounter.current++),
           type: 'text',
           position,
-          data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' }
+          data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' },
+          style: { width: 150, height: 50 }
         }
         break
       case 'shape':
@@ -1168,7 +1309,8 @@ function WorkspaceCanvas() {
           id: String(nodeIdCounter.current++),
           type: 'shape',
           position,
-          data: { shape: shape as 'rectangle' | 'circle' | 'triangle', backgroundColor: shapeColor, width: 100, height: 100 }
+          data: { shape: shape as 'rectangle' | 'circle' | 'triangle', backgroundColor: shapeColor, width: 100, height: 100 },
+          style: { width: 100, height: 100 }
         }
         break
       case 'board':
@@ -1212,7 +1354,8 @@ function WorkspaceCanvas() {
           id: String(nodeIdCounter.current++),
           type: 'reference',
           position,
-          data: { referenceType: refType, strength: 0.8, selectedOptions: [] }
+          data: { referenceType: refType, strength: 0.8, selectedOptions: [] },
+          style: { width: 280, height: 320 }
         }
         break
       case 'postProcess':
@@ -1221,7 +1364,8 @@ function WorkspaceCanvas() {
           id: String(nodeIdCounter.current++),
           type: 'postProcess',
           position,
-          data: { processType: ppType, intensity: 1.0, selectedOptions: [] }
+          data: { processType: ppType, intensity: 1.0, selectedOptions: [] },
+          style: { width: 260, height: 200 }
         }
         break
       default:
@@ -1412,6 +1556,25 @@ function WorkspaceCanvas() {
       navigateToBoard(currentBoard.parentId)
     }
   }
+
+  // 키보드 단축키 핸들러 (Delete/Backspace)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 입력 필드에 포커스가 있을 때는 무시
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        deleteSelected()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [nodes, edges, workspaceData])
 
   const breadcrumbs = getBreadcrumbs()
 

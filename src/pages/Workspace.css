@@ -525,13 +525,13 @@
 
 /* 노트 노드 */
 .note-node {
-  min-width: 200px;
-  min-height: 120px;
   padding: 16px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.2s;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .note-node:hover {
@@ -547,6 +547,8 @@
   line-height: 1.6;
   color: #374151;
   white-space: pre-wrap;
+  flex: 1;
+  overflow: auto;
 }
 
 /* React Flow 핸들 */
@@ -806,6 +808,9 @@
   padding: 8px 12px;
   background: transparent;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .text-node.selected {
@@ -817,6 +822,12 @@
   line-height: 1.4;
   white-space: pre-wrap;
   user-select: none;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
 }
 
 .text-node .react-flow__handle {
@@ -1352,12 +1363,15 @@
 
 /* AI 생성기 노드 (캔버스 내) */
 .ai-generator-node {
-  width: 300px;
+  width: 100%;
+  height: 100%;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   border: 2px solid #3b82f6;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .ai-generator-node.selected {
@@ -1377,6 +1391,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .ai-node-field {
@@ -1467,12 +1483,15 @@
 
 /* 프롬프트 빌더 노드 (캔버스 내) */
 .prompt-builder-node {
-  width: 340px;
+  width: 100%;
+  height: 100%;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   border: 2px solid #9c27b0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .prompt-builder-node.selected {
@@ -1521,7 +1540,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 300px;
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -1610,13 +1629,16 @@
 
 /* ==================== 참조 노드 스타일 ==================== */
 .reference-node {
-  width: 260px;
+  width: 100%;
+  height: 100%;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   border: 2px solid #eee;
   overflow: hidden;
   transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
 }
 
 .reference-node.selected {
@@ -1636,6 +1658,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .ref-dropzone {
@@ -1738,13 +1762,16 @@
 
 /* ==================== 후처리 노드 스타일 ==================== */
 .postprocess-node {
-  width: 240px;
+  width: 100%;
+  height: 100%;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   border: 2px solid #eee;
   overflow: hidden;
   transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
 }
 
 .postprocess-node.selected {
@@ -1764,6 +1791,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .pp-intensity {
@@ -1883,3 +1912,229 @@
 
 .pp-sty-drag { border-color: #FF9800 !important; }
 .pp-sty-drag:hover { background: rgba(255, 152, 0, 0.1); }
+
+/* ==================== 노드 연결 및 개선된 스타일 ==================== */
+
+/* AI 생성기 노드 - 연결 상태 */
+.ai-generator-node.has-connections {
+  border-color: #22c55e;
+}
+
+.ai-node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.connection-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.ai-node-connections {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.connections-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #166534;
+  margin-bottom: 6px;
+}
+
+.connection-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #374151;
+  padding: 4px 0;
+}
+
+.connection-item .conn-icon {
+  font-size: 14px;
+}
+
+.connection-item .conn-label {
+  flex: 1;
+}
+
+.connection-item .conn-status {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.connection-item.ref-connection:not(.has-image) .conn-status {
+  color: #f59e0b;
+}
+
+.ai-node-preview {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.ai-node-preview label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.ai-node-preview p {
+  margin: 0;
+  font-size: 11px;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.ai-node-help {
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+/* 프롬프트 빌더 노드 - 개선 */
+.prompt-builder-node {
+  width: 360px;
+  border-color: var(--prompt-color, #9c27b0);
+}
+
+.prompt-builder-node .prompt-node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.prompt-header-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.prompt-builder-node .prompt-node-tabs button {
+  font-size: 12px;
+}
+
+.prompt-builder-node .prompt-node-tabs button.active {
+  background: var(--tab-color, #9c27b0);
+}
+
+.prompt-cat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.prompt-cat-count {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.prompt-opt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.prompt-opt-btn .check-mark {
+  font-size: 10px;
+}
+
+.prompt-node-preview {
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid var(--prompt-color, #9c27b0);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.preview-header span {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.clear-btn {
+  padding: 2px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  font-size: 10px;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.clear-btn:hover {
+  background: #f3f4f6;
+}
+
+.preview-text {
+  margin: 0;
+  font-size: 11px;
+  color: #374151;
+  line-height: 1.4;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.prompt-node-help {
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+/* 참조 노드 도움말 */
+.ref-node-help {
+  font-size: 10px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 6px;
+  background: #f9fafb;
+  border-radius: 4px;
+  margin-top: 6px;
+}
+
+/* 노드 연결선 스타일 */
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3;
+}
+
+/* 연결선 애니메이션 */
+.react-flow__edge-path {
+  stroke-dasharray: 5;
+  animation: flowDash 1s linear infinite;
+}
+
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
