@@ -175,6 +175,13 @@
   color: #ef4444;
 }
 
+.toolbar-group-button.disabled,
+.toolbar-group-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .toolbar-divider {
   width: 32px;
   height: 1px;
@@ -551,6 +558,23 @@
   overflow: auto;
 }
 
+/* 노트 편집 textarea */
+.note-edit-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 80px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #374151;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
 /* React Flow 핸들 */
 .image-node .react-flow__handle,
 .note-node .react-flow__handle {
@@ -828,6 +852,18 @@
   align-items: center;
   justify-content: center;
   overflow: auto;
+}
+
+/* 텍스트 편집 input */
+.text-edit-input {
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  text-align: center;
 }
 
 .text-node .react-flow__handle {
@@ -2221,7 +2257,7 @@
   border-radius: 2px;
 }
 
-/* ==================== 단일 프롬프트 노드 스타일 ==================== */
+/* ==================== 단일 프롬프트 노드 스타일 (컴팩트) ==================== */
 .prompt-single-node {
   width: 100%;
   height: 100%;
@@ -2229,13 +2265,206 @@
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   border: 2px solid var(--prompt-color, #9c27b0);
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
+  min-width: 280px;
 }
 
 .prompt-single-node.selected {
   box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.5), 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.prompt-node-body-compact {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 카테고리 버튼 그리드 */
+.prompt-cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 6px;
+}
+
+.prompt-cat-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  min-height: 44px;
+}
+
+.prompt-cat-btn:hover {
+  border-color: var(--prompt-color, #9c27b0);
+  background: #fafafa;
+}
+
+.prompt-cat-btn.expanded {
+  border-color: var(--prompt-color, #9c27b0);
+  background: var(--prompt-color, #9c27b0);
+}
+
+.prompt-cat-btn.expanded .cat-btn-title {
+  color: #fff;
+}
+
+.cat-btn-title {
+  font-size: 10px;
+  font-weight: 500;
+  color: #374151;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.cat-btn-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 확장된 옵션 패널 */
+.prompt-expanded-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #fff;
+  border: 2px solid var(--prompt-color, #9c27b0);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  animation: expandIn 0.15s ease-out;
+}
+
+@keyframes expandIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.expanded-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--prompt-color, #9c27b0);
+}
+
+.expanded-close {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.expanded-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.expanded-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.prompt-opt-chip {
+  padding: 5px 10px;
+  border: 1.5px solid #ddd;
+  border-radius: 14px;
+  background: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.prompt-opt-chip:hover {
+  border-color: var(--prompt-color, #9c27b0);
+}
+
+.prompt-opt-chip.active {
+  font-weight: 600;
+}
+
+.chip-check {
+  font-size: 9px;
+}
+
+/* 선택된 태그 표시 */
+.prompt-selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.selected-tag {
+  padding: 3px 7px;
+  border: 1px solid;
+  border-radius: 10px;
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.selected-tag:hover {
+  opacity: 0.7;
+}
+
+.clear-all-btn {
+  padding: 3px 7px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #f9fafb;
+  font-size: 9px;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.clear-all-btn:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
 }
 
 /* ==================== 타입 선택 드롭다운 ==================== */

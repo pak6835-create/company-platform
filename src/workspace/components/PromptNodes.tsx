@@ -8,6 +8,7 @@ function SinglePromptNode({ selected, id, data }: NodeProps<SinglePromptNodeData
   const promptType = data.promptType || 'scene'
   const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string[] }>({})
   const [userPrompt, setUserPrompt] = useState('')
+  const [expandedCat, setExpandedCat] = useState<string | null>(null)
   const { setNodes } = useReactFlow()
 
   const nodeData = PROMPT_NODE_DATA[promptType]
@@ -62,12 +63,15 @@ function SinglePromptNode({ selected, id, data }: NodeProps<SinglePromptNodeData
     setUserPrompt('')
   }
 
+  // 카테고리별 선택된 옵션 수
+  const getSelectedCount = (catKey: string) => (selectedOptions[catKey] || []).length
+
   return (
     <div
       className={`prompt-single-node ${selected ? 'selected' : ''}`}
       style={{ '--prompt-color': themeColor } as React.CSSProperties}
     >
-      <NodeResizer isVisible={selected} minWidth={280} minHeight={250} />
+      <NodeResizer isVisible={selected} minWidth={320} minHeight={200} />
 
       <div
         className="prompt-node-header"
@@ -77,7 +81,8 @@ function SinglePromptNode({ selected, id, data }: NodeProps<SinglePromptNodeData
         <span className="prompt-header-count">{totalSelected}개</span>
       </div>
 
-      <div className="prompt-node-body prompt-scrollable" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="prompt-node-body-compact" onMouseDown={(e) => e.stopPropagation()}>
+        {/* 직접 입력 */}
         <input
           type="text"
           className="prompt-node-input nodrag"
@@ -86,50 +91,112 @@ function SinglePromptNode({ selected, id, data }: NodeProps<SinglePromptNodeData
           placeholder="직접 입력..."
         />
 
-        <div className="prompt-node-categories nodrag">
-          {Object.entries(nodeData).map(([catKey, category]) => (
-            <div key={catKey} className="prompt-mini-category">
-              <div className="prompt-cat-header">
-                <span className="prompt-cat-title">{category.title}</span>
-              </div>
-              <div className="prompt-cat-options">
-                {category.options.map((opt) => {
-                  const isSelected = (selectedOptions[catKey] || []).includes(opt.id)
-                  return (
-                    <button
-                      key={opt.id}
-                      className={`prompt-opt-btn ${isSelected ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        toggleOption(catKey, opt.id)
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      style={{
-                        borderColor: isSelected ? themeColor : '#ddd',
-                        backgroundColor: isSelected ? `${themeColor}15` : '#fff',
-                        color: isSelected ? themeColor : '#666',
-                      }}
-                    >
-                      {isSelected && <span className="check-mark">✓</span>}
-                      {opt.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+        {/* 카테고리 버튼 그리드 */}
+        <div className="prompt-cat-grid nodrag">
+          {Object.entries(nodeData).map(([catKey, category]) => {
+            const count = getSelectedCount(catKey)
+            const isExpanded = expandedCat === catKey
+            return (
+              <button
+                key={catKey}
+                className={`prompt-cat-btn ${count > 0 ? 'has-selection' : ''} ${isExpanded ? 'expanded' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setExpandedCat(isExpanded ? null : catKey)
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  borderColor: count > 0 ? themeColor : '#e5e7eb',
+                  backgroundColor: count > 0 ? `${themeColor}10` : '#fff',
+                }}
+              >
+                <span className="cat-btn-title">{category.title}</span>
+                {count > 0 && (
+                  <span className="cat-btn-count" style={{ backgroundColor: themeColor }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
-        {combinedPrompt && (
-          <div className="prompt-node-preview" style={{ borderLeftColor: themeColor }}>
-            <div className="preview-header">
-              <span style={{ color: themeColor }}>📝 프롬프트</span>
-              <button className="clear-btn" onClick={handleClear} onMouseDown={(e) => e.stopPropagation()}>
-                초기화
+        {/* 확장된 카테고리 옵션 */}
+        {expandedCat && nodeData[expandedCat] && (
+          <div className="prompt-expanded-options nodrag">
+            <div className="expanded-header">
+              <span>{nodeData[expandedCat].title}</span>
+              <button
+                className="expanded-close"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setExpandedCat(null)
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                ✕
               </button>
             </div>
-            <p className="preview-text">{combinedPrompt}</p>
+            <div className="expanded-options-grid">
+              {nodeData[expandedCat].options.map((opt) => {
+                const isSelected = (selectedOptions[expandedCat] || []).includes(opt.id)
+                return (
+                  <button
+                    key={opt.id}
+                    className={`prompt-opt-chip ${isSelected ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleOption(expandedCat, opt.id)
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{
+                      borderColor: isSelected ? themeColor : '#ddd',
+                      backgroundColor: isSelected ? `${themeColor}20` : '#fff',
+                      color: isSelected ? themeColor : '#555',
+                    }}
+                  >
+                    {isSelected && <span className="chip-check">✓</span>}
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 선택된 옵션 태그 표시 */}
+        {totalSelected > 0 && (
+          <div className="prompt-selected-tags">
+            {Object.entries(selectedOptions).map(([catKey, ids]) =>
+              ids.map((optId) => {
+                const opt = nodeData[catKey]?.options.find((o) => o.id === optId)
+                if (!opt) return null
+                return (
+                  <span
+                    key={optId}
+                    className="selected-tag"
+                    style={{ backgroundColor: `${themeColor}15`, color: themeColor, borderColor: themeColor }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleOption(catKey, optId)
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {opt.label} ✕
+                  </span>
+                )
+              })
+            )}
+            <button
+              className="clear-all-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleClear()
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              전체 삭제
+            </button>
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactFlow, {
   Background,
@@ -9,6 +9,7 @@ import ReactFlow, {
   ReactFlowProvider,
   useReactFlow,
   Node,
+  Edge,
   Connection,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
@@ -20,6 +21,12 @@ import { useWorkspace } from '../workspace/hooks'
 import { NOTE_COLORS, SHAPE_COLORS } from '../workspace/config'
 import { Board, WorkspaceData } from '../workspace/types'
 import { saveWorkspaceData } from '../workspace/utils'
+
+// 히스토리 타입
+interface HistoryState {
+  nodes: Node[]
+  edges: Edge[]
+}
 
 function WorkspaceCanvas() {
   const navigate = useNavigate()
@@ -46,6 +53,136 @@ function WorkspaceCanvas() {
   const [showTray, setShowTray] = useState(true)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
+
+  // 실행취소/다시실행 히스토리
+  const [history, setHistory] = useState<HistoryState[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const isUndoRedo = useRef(false)
+
+  // 클립보드
+  const [clipboard, setClipboard] = useState<Node[]>([])
+
+  // 히스토리에 현재 상태 저장
+  const saveHistory = useCallback(() => {
+    if (isUndoRedo.current) {
+      isUndoRedo.current = false
+      return
+    }
+    const newState: HistoryState = {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      edges: JSON.parse(JSON.stringify(edges)),
+    }
+    setHistory((prev) => {
+      const newHistory = prev.slice(0, historyIndex + 1)
+      return [...newHistory, newState].slice(-50) // 최대 50개 히스토리
+    })
+    setHistoryIndex((prev) => Math.min(prev + 1, 49))
+  }, [nodes, edges, historyIndex])
+
+  // 실행취소
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      isUndoRedo.current = true
+      const prevState = history[historyIndex - 1]
+      setNodes(prevState.nodes)
+      setEdges(prevState.edges)
+      setHistoryIndex(historyIndex - 1)
+    }
+  }, [history, historyIndex, setNodes, setEdges])
+
+  // 다시실행
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      isUndoRedo.current = true
+      const nextState = history[historyIndex + 1]
+      setNodes(nextState.nodes)
+      setEdges(nextState.edges)
+      setHistoryIndex(historyIndex + 1)
+    }
+  }, [history, historyIndex, setNodes, setEdges])
+
+  // 복사
+  const copySelectedNodes = useCallback(() => {
+    const selectedNodes = nodes.filter((n) => n.selected)
+    if (selectedNodes.length > 0) {
+      setClipboard(JSON.parse(JSON.stringify(selectedNodes)))
+    }
+  }, [nodes])
+
+  // 붙여넣기
+  const pasteNodes = useCallback(() => {
+    if (clipboard.length === 0) return
+    const newNodes = clipboard.map((node) => ({
+      ...node,
+      id: getNewNodeId(),
+      position: {
+        x: node.position.x + 50,
+        y: node.position.y + 50,
+      },
+      selected: true,
+    }))
+    // 기존 노드 선택 해제
+    setNodes((nds) => [
+      ...nds.map((n) => ({ ...n, selected: false })),
+      ...newNodes,
+    ])
+    saveHistory()
+  }, [clipboard, getNewNodeId, setNodes, saveHistory])
+
+  // 키보드 단축키 핸들러
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // input/textarea에서는 무시
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return
+      }
+
+      // Ctrl/Cmd + Z: 실행취소
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+      // Ctrl/Cmd + Shift + Z 또는 Ctrl/Cmd + Y: 다시실행
+      if (
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') ||
+        ((e.ctrlKey || e.metaKey) && e.key === 'y')
+      ) {
+        e.preventDefault()
+        redo()
+      }
+      // Ctrl/Cmd + C: 복사
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault()
+        copySelectedNodes()
+      }
+      // Ctrl/Cmd + V: 붙여넣기
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault()
+        pasteNodes()
+      }
+      // Ctrl/Cmd + A: 전체선택
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault()
+        setNodes((nds) => nds.map((n) => ({ ...n, selected: true })))
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes])
+
+  // 노드/엣지 변경 시 히스토리 저장 (debounce)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (nodes.length > 0 || edges.length > 0) {
+        saveHistory()
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [nodes.length, edges.length])
 
   // 엣지 연결
   const onConnect = useCallback(
@@ -280,6 +417,30 @@ function WorkspaceCanvas() {
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+
+        <div className="toolbar-divider" />
+
+        <button
+          className={`toolbar-group-button ${historyIndex <= 0 ? 'disabled' : ''}`}
+          data-tooltip="실행취소 (Ctrl+Z)"
+          onClick={undo}
+          disabled={historyIndex <= 0}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 10h10a5 5 0 015 5v2M3 10l5-5M3 10l5 5" />
+          </svg>
+        </button>
+
+        <button
+          className={`toolbar-group-button ${historyIndex >= history.length - 1 ? 'disabled' : ''}`}
+          data-tooltip="다시실행 (Ctrl+Y)"
+          onClick={redo}
+          disabled={historyIndex >= history.length - 1}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 10H11a5 5 0 00-5 5v2M21 10l-5-5M21 10l-5 5" />
           </svg>
         </button>
 
