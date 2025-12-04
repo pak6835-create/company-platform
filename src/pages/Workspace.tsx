@@ -21,7 +21,6 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import './Workspace.css'
-import PromptNodePanel from '../components/nodes/PromptNodePanel'
 import { SCENE_NODE_DATA, CHARACTER_NODE_DATA, PROPS_NODE_DATA, NODE_COLORS } from '../components/nodes/node-data'
 
 // 타입 정의
@@ -309,7 +308,7 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
         {hasConnections && <span className="connection-badge">🔗 {connectedSources.length}</span>}
       </div>
 
-      <div className="ai-node-content">
+      <div className="ai-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
         {/* 연결 상태 표시 */}
         {hasConnections && (
           <div className="ai-node-connections">
@@ -335,12 +334,13 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
           <label>API 키</label>
           <div className="ai-node-input-row">
             <input
+              className="nodrag"
               type={showApiKey ? 'text' : 'password'}
               value={localApiKey}
               onChange={(e) => setLocalApiKey(e.target.value)}
               placeholder="AIza..."
             />
-            <button onClick={() => setShowApiKey(!showApiKey)}>
+            <button onMouseDown={(e) => e.stopPropagation()} onClick={() => setShowApiKey(!showApiKey)}>
               {showApiKey ? '숨김' : '보기'}
             </button>
           </div>
@@ -348,7 +348,7 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
 
         <div className="ai-node-field">
           <label>모델</label>
-          <select value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
+          <select className="nodrag" value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
             <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
             <option value="gemini-3-pro-image-preview">Gemini 3.0 Pro</option>
           </select>
@@ -357,6 +357,7 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
         <div className="ai-node-field">
           <label>추가 프롬프트 {connectedPrompts && '(연결됨)'}</label>
           <textarea
+            className="nodrag"
             value={localPrompt}
             onChange={(e) => setLocalPrompt(e.target.value)}
             placeholder={connectedPrompts ? "연결된 프롬프트에 추가할 내용..." : "생성할 이미지 설명..."}
@@ -377,6 +378,7 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
         <button
           className="ai-node-generate-btn"
           onClick={handleGenerate}
+          onMouseDown={(e) => e.stopPropagation()}
           disabled={isGenerating || !getFinalPrompt()}
         >
           {isGenerating ? '⏳ 생성 중...' : '✨ 이미지 생성'}
@@ -394,6 +396,13 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
   )
 }
 
+// 기존 node-data.ts의 풍부한 데이터 (컴포넌트 외부에 정의)
+const FULL_NODE_DATA = {
+  scene: SCENE_NODE_DATA,
+  character: CHARACTER_NODE_DATA,
+  props: PROPS_NODE_DATA,
+}
+
 // 프롬프트 빌더 노드 (캔버스에 배치되는 카드형) - 전체 데이터 사용
 function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeData>) {
   const [activeTab, setActiveTab] = useState<'scene' | 'character' | 'props'>('scene')
@@ -401,26 +410,18 @@ function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeDa
   const [userPrompt, setUserPrompt] = useState('')
   const { setNodes } = useReactFlow()
 
-  // 기존 node-data.ts의 풍부한 데이터 사용
-  const FULL_NODE_DATA = {
-    scene: SCENE_NODE_DATA,
-    character: CHARACTER_NODE_DATA,
-    props: PROPS_NODE_DATA,
-  }
-
   const currentData = FULL_NODE_DATA[activeTab]
   const themeColor = NODE_COLORS[activeTab]
 
-  const toggleOption = (catKey: string, optId: string) => {
+  const toggleOption = useCallback((catKey: string, optId: string) => {
     setSelectedOptions(prev => {
       const curr = prev[catKey] || []
-      const newSelected = {
+      return {
         ...prev,
         [catKey]: curr.includes(optId) ? curr.filter(i => i !== optId) : [...curr, optId]
       }
-      return newSelected
     })
-  }
+  }, [])
 
   // 모든 탭에서 선택된 옵션으로 프롬프트 조합
   const getCombinedPrompt = useCallback(() => {
@@ -444,16 +445,21 @@ function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeDa
   // 선택된 총 옵션 수
   const totalSelected = Object.values(selectedOptions).reduce((sum, arr) => sum + arr.length, 0)
 
-  // 프롬프트가 변경될 때마다 노드 데이터 업데이트
+  // 프롬프트가 변경될 때마다 노드 데이터 업데이트 (ref 사용으로 무한루프 방지)
+  const combinedPrompt = getCombinedPrompt()
+  const prevPromptRef = useRef<string>('')
+
   useEffect(() => {
-    const prompt = getCombinedPrompt()
-    setNodes(nds => nds.map(n => {
-      if (n.id === id) {
-        return { ...n, data: { ...n.data, combinedPrompt: prompt } }
-      }
-      return n
-    }))
-  }, [selectedOptions, userPrompt, id, setNodes, getCombinedPrompt])
+    if (prevPromptRef.current !== combinedPrompt) {
+      prevPromptRef.current = combinedPrompt
+      setNodes(nds => nds.map(n => {
+        if (n.id === id) {
+          return { ...n, data: { ...n.data, combinedPrompt } }
+        }
+        return n
+      }))
+    }
+  }, [combinedPrompt, id, setNodes])
 
   const handleClear = () => {
     setSelectedOptions({})
@@ -493,16 +499,16 @@ function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeDa
         </button>
       </div>
 
-      <div className="prompt-node-body">
+      <div className="prompt-node-body" onMouseDown={(e) => e.stopPropagation()}>
         <input
           type="text"
-          className="prompt-node-input"
+          className="prompt-node-input nodrag"
           value={userPrompt}
           onChange={(e) => setUserPrompt(e.target.value)}
           placeholder="기본 프롬프트 입력..."
         />
 
-        <div className="prompt-node-categories">
+        <div className="prompt-node-categories nodrag">
           {Object.entries(currentData).map(([catKey, category]) => (
             <div key={catKey} className="prompt-mini-category">
               <div className="prompt-cat-header">
@@ -516,7 +522,12 @@ function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeDa
                     <button
                       key={opt.id}
                       className={`prompt-opt-btn ${isSelected ? 'active' : ''}`}
-                      onClick={() => toggleOption(catKey, opt.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        toggleOption(catKey, opt.id)
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       style={{
                         borderColor: isSelected ? themeColor : '#ddd',
                         backgroundColor: isSelected ? `${themeColor}15` : '#fff',
@@ -533,13 +544,13 @@ function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeDa
           ))}
         </div>
 
-        {getCombinedPrompt() && (
+        {combinedPrompt && (
           <div className="prompt-node-preview" style={{ borderLeftColor: themeColor }}>
             <div className="preview-header">
               <span style={{ color: themeColor }}>📝 조합된 프롬프트</span>
-              <button className="clear-btn" onClick={handleClear}>초기화</button>
+              <button className="clear-btn" onClick={handleClear} onMouseDown={(e) => e.stopPropagation()}>초기화</button>
             </div>
-            <p className="preview-text">{getCombinedPrompt()}</p>
+            <p className="preview-text">{combinedPrompt}</p>
           </div>
         )}
 
@@ -644,11 +655,11 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
         <span>{config.title}</span>
       </div>
 
-      <div className="ref-node-content">
+      <div className="ref-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
         {/* 이미지 드롭존 */}
         <div
           className={`ref-dropzone ${isDragging ? 'dragging' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           onClick={() => !image && fileInputRef.current?.click()}
@@ -664,7 +675,7 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
           {image ? (
             <>
               <img src={image} alt="Reference" className="ref-preview-img" draggable={false} />
-              <button className="ref-remove-btn" onClick={(e) => { e.stopPropagation(); setImage('') }}>×</button>
+              <button className="ref-remove-btn" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setImage('') }}>×</button>
             </>
           ) : (
             <>
@@ -682,6 +693,7 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
               <span>{Math.round(strength * 100)}%</span>
             </div>
             <input
+              className="nodrag"
               type="range"
               min="0"
               max="1"
@@ -699,7 +711,8 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
             <button
               key={opt.id}
               className={`ref-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}
-              onClick={() => toggleOption(opt.id)}
+              onClick={(e) => { e.stopPropagation(); toggleOption(opt.id) }}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 borderColor: selectedOptions.includes(opt.id) ? themeColor : '#ddd',
                 backgroundColor: selectedOptions.includes(opt.id) ? `${themeColor}20` : '#fff',
@@ -773,7 +786,7 @@ function PostProcessNode({ data, selected }: NodeProps<PostProcessNodeData>) {
         <span>{config.title}</span>
       </div>
 
-      <div className="pp-node-content">
+      <div className="pp-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
         {/* 강도 슬라이더 */}
         <div className="pp-intensity">
           <div className="pp-intensity-label">
@@ -781,6 +794,7 @@ function PostProcessNode({ data, selected }: NodeProps<PostProcessNodeData>) {
             <span>{Math.round(intensity * 100)}%</span>
           </div>
           <input
+            className="nodrag"
             type="range"
             min="0"
             max="1"
@@ -797,7 +811,8 @@ function PostProcessNode({ data, selected }: NodeProps<PostProcessNodeData>) {
             <button
               key={opt.id}
               className={`pp-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}
-              onClick={() => toggleOption(opt.id)}
+              onClick={(e) => { e.stopPropagation(); toggleOption(opt.id) }}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 borderColor: selectedOptions.includes(opt.id) ? themeColor : '#ddd',
                 backgroundColor: selectedOptions.includes(opt.id) ? `${themeColor}20` : '#fff',
@@ -980,22 +995,11 @@ function WorkspaceCanvas() {
   const [workspaceData, setWorkspaceData] = useState<WorkspaceData>(loadWorkspaceData)
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [showAIPanel, setShowAIPanel] = useState(false)
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [activeTool, setActiveTool] = useState<string>('select')
 
-  // AI Tool states
-  const [apiKey, setApiKey] = useState('')
-  const [showApiKey, setShowApiKey] = useState(false)
-  const [model, setModel] = useState('gemini-2.0-flash-exp')
-  const [prompt, setPrompt] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [progress, setProgress] = useState({ text: '', percent: 0 })
-  const [error, setError] = useState('')
-
   const nodeIdCounter = useRef(Date.now())
   const [showTray, setShowTray] = useState(true)
-  const [showNodePanel, setShowNodePanel] = useState(false)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
 
@@ -1110,40 +1114,6 @@ function WorkspaceCanvas() {
       navigateToBoard(node.data.boardId)
     }
   }, [navigateToBoard])
-
-
-  // 이미지 생성 함수
-  const generateImage = async (promptText: string): Promise<string> => {
-    const isProduction = window.location.hostname !== 'localhost'
-    const endpoint = isProduction
-      ? '/.netlify/functions/generate'
-      : `/api/gemini/v1beta/models/${model}:generateContent?key=${apiKey}`
-
-    const parts = [{ text: promptText }]
-
-    const body = isProduction
-      ? JSON.stringify({ prompt: promptText, apiKey, model })
-      : JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
-        })
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    })
-
-    const data = await response.json()
-    if (data.error) throw new Error(data.error.message || data.error)
-
-    const imagePart = data.candidates?.[0]?.content?.parts?.find(
-      (p: { inlineData?: { data: string } }) => p.inlineData?.data
-    )
-    if (!imagePart) throw new Error('이미지 생성 실패')
-
-    return 'data:image/png;base64,' + imagePart.inlineData.data
-  }
 
   // 캔버스에 노드 추가 함수들
   const addImageToCanvas = (imageUrl: string, label: string) => {
@@ -1490,37 +1460,6 @@ function WorkspaceCanvas() {
     return () => window.removeEventListener('paste', handlePaste)
   }, [addToTray])
 
-
-  // AI 생성 실행
-  const handleGenerate = async () => {
-    if (!apiKey || !prompt) {
-      setError('API 키와 프롬프트를 입력해주세요')
-      return
-    }
-
-    setIsGenerating(true)
-    setError('')
-    setProgress({ text: '이미지 생성 중...', percent: 50 })
-
-    try {
-      const imageUrl = await generateImage(prompt)
-      // 트레이에 추가
-      addToTray('image', {
-        imageUrl,
-        label: prompt.slice(0, 30) + '...',
-        width: 300,
-        height: 300
-      } as ImageNodeData)
-      setProgress({ text: '완료! 트레이에 추가됨', percent: 100 })
-      setPrompt('')
-      setShowAIPanel(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '생성 실패')
-    } finally {
-      setIsGenerating(false)
-    }
-  }
-
   // 선택된 노드 삭제
   const deleteSelected = () => {
     // 보드 노드 삭제 시 해당 보드도 삭제
@@ -1663,27 +1602,12 @@ function WorkspaceCanvas() {
 
         <div className="toolbar-divider" />
 
-        {/* AI 도구 */}
-        <div className="toolbar-group">
-          <button
-            className={`toolbar-group-button ${showAIPanel ? 'active' : ''}`}
-            data-tooltip="AI 이미지 생성"
-            onClick={() => { setShowAIPanel(!showAIPanel); setShowAddPanel(false) }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="toolbar-divider" />
-
         {/* 추가 도구 */}
         <div className="toolbar-group">
           <button
             className={`toolbar-group-button ${showAddPanel ? 'active' : ''}`}
             data-tooltip="요소 추가"
-            onClick={() => { setShowAddPanel(!showAddPanel); setShowAIPanel(false) }}
+            onClick={() => setShowAddPanel(!showAddPanel)}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -2055,79 +1979,6 @@ function WorkspaceCanvas() {
         </div>
       )}
 
-      {/* AI 패널 */}
-      {showAIPanel && (
-        <div className="ai-panel">
-          <div className="ai-panel-header">
-            <h3>AI 이미지 생성</h3>
-            <button className="ai-panel-close" onClick={() => setShowAIPanel(false)}>×</button>
-          </div>
-
-          <div className="ai-panel-content">
-            <div className="ai-input-group">
-              <label>API 키</label>
-              <div className="ai-input-row">
-                <input
-                  type={showApiKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="AIza..."
-                />
-                <button onClick={() => setShowApiKey(!showApiKey)}>
-                  {showApiKey ? '숨김' : '보기'}
-                </button>
-              </div>
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="ai-link">
-                API 키 발급받기 →
-              </a>
-            </div>
-
-            <div className="ai-input-group">
-              <label>모델</label>
-              <select value={model} onChange={(e) => setModel(e.target.value)}>
-                <option value="gemini-2.0-flash-exp">Nano Banana (무료)</option>
-                <option value="gemini-3-pro-image-preview">Nano Banana Pro 3.0 (유료)</option>
-              </select>
-            </div>
-
-            <div className="ai-input-group">
-              <label>프롬프트</label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="생성할 이미지 설명..."
-                rows={4}
-              />
-              <button
-                className="ai-node-helper-btn"
-                onClick={() => { setShowNodePanel(true); setShowAIPanel(false) }}
-              >
-                🎨 프롬프트 노드로 생성
-              </button>
-            </div>
-
-            {error && <div className="ai-error">{error}</div>}
-
-            {isGenerating && (
-              <div className="ai-progress">
-                <span>{progress.text}</span>
-                <div className="ai-progress-bar">
-                  <div className="ai-progress-fill" style={{ width: `${progress.percent}%` }} />
-                </div>
-              </div>
-            )}
-
-            <button
-              className="ai-generate-btn"
-              onClick={handleGenerate}
-              disabled={isGenerating || !apiKey || !prompt}
-            >
-              {isGenerating ? '생성 중...' : '캔버스에 생성'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 캔버스 */}
       <div className="react-flow-canvas" ref={reactFlowWrapper}>
         <ReactFlow
@@ -2252,20 +2103,6 @@ function WorkspaceCanvas() {
         </button>
       )}
 
-      {/* 프롬프트 노드 패널 */}
-      {showNodePanel && (
-        <>
-          <div className="node-panel-overlay" onClick={() => setShowNodePanel(false)} />
-          <PromptNodePanel
-            onPromptGenerated={(generatedPrompt) => {
-              setPrompt(generatedPrompt)
-              setShowNodePanel(false)
-              setShowAIPanel(true)
-            }}
-            onClose={() => setShowNodePanel(false)}
-          />
-        </>
-      )}
     </div>
   )
 }
