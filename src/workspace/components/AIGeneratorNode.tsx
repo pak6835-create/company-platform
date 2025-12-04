@@ -3,14 +3,15 @@ import { NodeProps, NodeResizer, Handle, Position, useStore } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
 // 모델 목록 (나노바나나 = Gemini 이미지 생성 모델 코드명)
+// 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
 const MODELS = [
-  { id: 'gemini-2.0-flash-exp', name: '나노바나나 2' },
-  { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 3 Pro' },
+  { id: 'gemini-2.0-flash-exp-image-generation', name: '나노바나나 2' },
+  { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 2.5' },
 ]
 
 export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
   const [localApiKey, setLocalApiKey] = useState(data.apiKey || '')
-  const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-exp')
+  const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-exp-image-generation')
   const [localPrompt, setLocalPrompt] = useState(data.prompt || '')
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
@@ -72,7 +73,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: finalPrompt }] }],
-          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+          generationConfig: { responseModalities: ['Text', 'Image'] },
         }),
       })
 
