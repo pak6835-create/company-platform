@@ -19,6 +19,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import './Workspace.css'
+import PromptNodePanel from '../components/nodes/PromptNodePanel'
 
 // 타입 정의
 interface Board {
@@ -317,6 +318,7 @@ function WorkspaceCanvas() {
 
   const nodeIdCounter = useRef(Date.now())
   const [showTray, setShowTray] = useState(true)
+  const [showNodePanel, setShowNodePanel] = useState(false)
 
   // 현재 보드 가져오기
   const currentBoard = workspaceData.boards[workspaceData.currentBoardId]
@@ -920,6 +922,15 @@ function WorkspaceCanvas() {
             <button className="add-panel-close" onClick={() => setShowAddPanel(false)}>×</button>
           </div>
           <div className="add-panel-content">
+            {/* AI 도구 */}
+            <div className="add-section">
+              <h4>AI 도구</h4>
+              <button className="add-item-btn ai-node-btn" onClick={() => { setShowNodePanel(true); setShowAddPanel(false) }}>
+                <span style={{ fontSize: '18px' }}>🎨</span>
+                <span>프롬프트 노드</span>
+              </button>
+            </div>
+
             {/* 보드 (폴더) */}
             <div className="add-section">
               <h4>보드</h4>
@@ -1031,6 +1042,12 @@ function WorkspaceCanvas() {
                 placeholder="생성할 이미지 설명..."
                 rows={4}
               />
+              <button
+                className="ai-node-helper-btn"
+                onClick={() => { setShowNodePanel(true); setShowAIPanel(false) }}
+              >
+                🎨 프롬프트 노드로 생성
+              </button>
             </div>
 
             {error && <div className="ai-error">{error}</div>}
@@ -1173,6 +1190,21 @@ function WorkspaceCanvas() {
           </svg>
           트레이 {trayItems.length > 0 ? `(${trayItems.length})` : ''}
         </button>
+      )}
+
+      {/* 프롬프트 노드 패널 */}
+      {showNodePanel && (
+        <>
+          <div className="node-panel-overlay" onClick={() => setShowNodePanel(false)} />
+          <PromptNodePanel
+            onPromptGenerated={(generatedPrompt) => {
+              setPrompt(generatedPrompt)
+              setShowNodePanel(false)
+              setShowAIPanel(true)
+            }}
+            onClose={() => setShowNodePanel(false)}
+          />
+        </>
       )}
     </div>
   )

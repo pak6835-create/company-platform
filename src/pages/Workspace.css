@@ -1209,3 +1209,48 @@
 .board-node.drag-over .board-node-icon svg {
   stroke: #3b82f6;
 }
+
+/* 노드 패널 오버레이 */
+.node-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+  animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* AI 노드 헬퍼 버튼 */
+.ai-node-helper-btn {
+  margin-top: 8px;
+  padding: 10px 16px;
+  width: 100%;
+  background: linear-gradient(135deg, #4A90D9 0%, #9C27B0 50%, #FF6B35 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-node-helper-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+}
+
+/* AI 노드 버튼 (추가 패널 내) */
+.add-item-btn.ai-node-btn {
+  background: linear-gradient(135deg, rgba(74, 144, 217, 0.2) 0%, rgba(156, 39, 176, 0.2) 50%, rgba(255, 107, 53, 0.2) 100%);
+  border: 1px solid rgba(156, 39, 176, 0.3);
+}
+
+.add-item-btn.ai-node-btn:hover {
+  background: linear-gradient(135deg, rgba(74, 144, 217, 0.3) 0%, rgba(156, 39, 176, 0.3) 50%, rgba(255, 107, 53, 0.3) 100%);
+  border-color: rgba(156, 39, 176, 0.5);
+}
