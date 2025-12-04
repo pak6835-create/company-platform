@@ -562,7 +562,7 @@ function WorkspaceCanvas() {
   }
 
   // 새 보드 생성
-  const addBoard = () => {
+  const addBoard = useCallback(() => {
     const boardId = `board-${nodeIdCounter.current++}`
 
     // 새 보드 데이터 생성
@@ -594,7 +594,10 @@ function WorkspaceCanvas() {
       }
     }
 
-    // 워크스페이스 데이터 업데이트
+    // 워크스페이스 데이터 업데이트 (먼저 노드 추가)
+    setNodes((nds) => [...nds, newNode])
+
+    // 보드 데이터 업데이트
     const updatedData = {
       ...workspaceData,
       boards: {
@@ -604,10 +607,8 @@ function WorkspaceCanvas() {
     }
     setWorkspaceData(updatedData)
     saveWorkspaceData(updatedData)
-
-    setNodes((nds) => [...nds, newNode])
     setShowAddPanel(false)
-  }
+  }, [workspaceData, setNodes])
 
   // 보드 이름 변경
   const handleBoardNameChange = useCallback((boardId: string, newName: string) => {
@@ -1281,12 +1282,12 @@ function WorkspaceCanvas() {
       )}
 
       {/* 트레이 열기 버튼 (트레이가 닫혀있을 때) */}
-      {!showTray && trayItems.length > 0 && (
+      {!showTray && (
         <button className="tray-open-btn" onClick={() => setShowTray(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M5 12l7-7 7 7" />
           </svg>
-          트레이 ({trayItems.length})
+          트레이 {trayItems.length > 0 ? `(${trayItems.length})` : ''}
         </button>
       )}
     </div>
