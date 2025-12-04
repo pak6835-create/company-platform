@@ -21,7 +21,12 @@
       "Bash(git push)",
       "Bash(git commit:*)",
       "Bash(git merge:*)",
-      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix white screen by adding null safety checks\n\n- Add fallback defaults for PROMPT_NODE_DATA, PROMPT_COLORS, PROMPT_TITLES\n- Add fallback defaults for REFERENCE_NODE_CONFIG and config.options\n- Add fallback defaults for POSTPROCESS_NODE_CONFIG and config.options\n- Prevents crashes when node configs are undefined\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix white screen by adding null safety checks\n\n- Add fallback defaults for PROMPT_NODE_DATA, PROMPT_COLORS, PROMPT_TITLES\n- Add fallback defaults for REFERENCE_NODE_CONFIG and config.options\n- Add fallback defaults for POSTPROCESS_NODE_CONFIG and config.options\n- Prevents crashes when node configs are undefined\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add CLAUDE.md)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nUpdate CLAUDE.md with current project structure\n\n- Add developer info and communication style\n- Update project structure to reflect workspace module\n- Document all node types and their features\n- Add coding rules and troubleshooting guide\n- Update progress checklist\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nAdd 404.html for GitHub Pages SPA routing\n\n- Add Vite plugin to copy index.html to 404.html after build\n- Fixes 404 error when accessing routes directly on GitHub Pages\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
