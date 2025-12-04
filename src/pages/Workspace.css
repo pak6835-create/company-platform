@@ -2138,3 +2138,182 @@
     stroke-dashoffset: -10;
   }
 }
+
+/* ==================== 스크롤 가능한 노드 컨텐츠 ==================== */
+
+/* 추가 패널 스크롤 */
+.add-panel-scrollable {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.add-panel-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.add-panel-scrollable::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.add-panel-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+/* 프롬프트 노드 스크롤 */
+.prompt-scrollable {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.prompt-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.prompt-scrollable::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 2px;
+}
+
+.prompt-scrollable::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* 참조 노드 스크롤 */
+.ref-scrollable {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ref-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.ref-scrollable::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 2px;
+}
+
+.ref-scrollable::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* 후처리 노드 스크롤 */
+.pp-scrollable {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.pp-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.pp-scrollable::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 2px;
+}
+
+.pp-scrollable::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* ==================== 단일 프롬프트 노드 스타일 ==================== */
+.prompt-single-node {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 2px solid var(--prompt-color, #9c27b0);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-single-node.selected {
+  box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.5), 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* ==================== 타입 선택 드롭다운 ==================== */
+.ref-type-selector,
+.pp-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ref-type-selector label,
+.pp-type-selector label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.ref-type-selector select,
+.pp-type-selector select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.ref-type-selector select:focus,
+.pp-type-selector select:focus {
+  outline: none;
+}
+
+/* ==================== 프롬프트 빌더 드래그 아이템 ==================== */
+.prompt-scene-drag {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(76, 175, 80, 0.1) 100%);
+  border-color: rgba(76, 175, 80, 0.3) !important;
+}
+
+.prompt-scene-drag:hover {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.3) 0%, rgba(76, 175, 80, 0.2) 100%);
+}
+
+.prompt-character-drag {
+  background: linear-gradient(135deg, rgba(33, 150, 243, 0.2) 0%, rgba(33, 150, 243, 0.1) 100%);
+  border-color: rgba(33, 150, 243, 0.3) !important;
+}
+
+.prompt-character-drag:hover {
+  background: linear-gradient(135deg, rgba(33, 150, 243, 0.3) 0%, rgba(33, 150, 243, 0.2) 100%);
+}
+
+.prompt-props-drag {
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 152, 0, 0.1) 100%);
+  border-color: rgba(255, 152, 0, 0.3) !important;
+}
+
+.prompt-props-drag:hover {
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.3) 0%, rgba(255, 152, 0, 0.2) 100%);
+}
+
+.reference-drag {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(33, 150, 243, 0.1) 100%);
+  border-color: rgba(76, 175, 80, 0.3) !important;
+}
+
+.reference-drag:hover {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.3) 0%, rgba(33, 150, 243, 0.2) 100%);
+}
+
+.postprocess-drag {
+  background: linear-gradient(135deg, rgba(233, 30, 99, 0.2) 0%, rgba(156, 39, 176, 0.1) 100%);
+  border-color: rgba(233, 30, 99, 0.3) !important;
+}
+
+.postprocess-drag:hover {
+  background: linear-gradient(135deg, rgba(233, 30, 99, 0.3) 0%, rgba(156, 39, 176, 0.2) 100%);
+}

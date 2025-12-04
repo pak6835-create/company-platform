@@ -260,22 +260,16 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
     setError('')
 
     try {
-      const isProduction = window.location.hostname !== 'localhost'
-      const endpoint = isProduction
-        ? '/.netlify/functions/generate'
-        : `/api/gemini/v1beta/models/${localModel}:generateContent?key=${localApiKey}`
-
-      const body = isProduction
-        ? JSON.stringify({ prompt: finalPrompt, apiKey: localApiKey, model: localModel })
-        : JSON.stringify({
-            contents: [{ parts: [{ text: finalPrompt }] }],
-            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
-          })
+      // 항상 직접 Gemini API 호출 (GitHub Pages에서는 서버리스 함수 사용 불가)
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${localModel}:generateContent?key=${localApiKey}`
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: finalPrompt }] }],
+          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+        })
       })
 
       const result = await response.json()
@@ -404,15 +398,20 @@ const FULL_NODE_DATA = {
   props: PROPS_NODE_DATA,
 }
 
-// 프롬프트 빌더 노드 (캔버스에 배치되는 카드형) - 전체 데이터 사용
-function PromptBuilderNode({ selected, id }: NodeProps<PromptBuilderNodeData>) {
-  const [activeTab, setActiveTab] = useState<'scene' | 'character' | 'props'>('scene')
+// 단일 카테고리 프롬프트 노드 (공통 컴포넌트)
+interface SinglePromptNodeData extends PromptBuilderNodeData {
+  promptType: 'scene' | 'character' | 'props'
+}
+
+function SinglePromptNode({ selected, id, data }: NodeProps<SinglePromptNodeData>) {
+  const promptType = data.promptType || 'scene'
   const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string[] }>({})
   const [userPrompt, setUserPrompt] = useState('')
   const { setNodes } = useReactFlow()
 
-  const currentData = FULL_NODE_DATA[activeTab]
-  const themeColor = NODE_COLORS[activeTab]
+  const nodeData = FULL_NODE_DATA[promptType]
+  const themeColor = NODE_COLORS[promptType]
+  const titles = { scene: '🎬 장면', character: '🧑 캐릭터', props: '🎒 소품' }
 
   const toggleOption = useCallback((catKey: string, optId: string) => {
     setSelectedOptions(prev => {
@@ -424,29 +423,22 @@ function PromptBuilderNode({ selected, id }: NodeProps<PromptBuilderNodeData>) {
     })
   }, [])
 
-  // 모든 탭에서 선택된 옵션으로 프롬프트 조합
   const getCombinedPrompt = useCallback(() => {
     const parts: string[] = []
     if (userPrompt.trim()) parts.push(userPrompt.trim())
 
-    // 모든 탭의 데이터를 순회
-    Object.entries(FULL_NODE_DATA).forEach(([, tabData]) => {
-      Object.entries(tabData).forEach(([catKey, category]) => {
-        const selectedIds = selectedOptions[catKey] || []
-        selectedIds.forEach(optId => {
-          const opt = category.options.find(o => o.id === optId)
-          if (opt) parts.push(opt.prompt)
-        })
+    Object.entries(nodeData).forEach(([catKey, category]) => {
+      const selectedIds = selectedOptions[catKey] || []
+      selectedIds.forEach(optId => {
+        const opt = category.options.find(o => o.id === optId)
+        if (opt) parts.push(opt.prompt)
       })
     })
 
     return parts.join(', ')
-  }, [selectedOptions, userPrompt])
+  }, [selectedOptions, userPrompt, nodeData])
 
-  // 선택된 총 옵션 수
   const totalSelected = Object.values(selectedOptions).reduce((sum, arr) => sum + arr.length, 0)
-
-  // 프롬프트가 변경될 때마다 노드 데이터 업데이트 (ref 사용으로 무한루프 방지)
   const combinedPrompt = getCombinedPrompt()
   const prevPromptRef = useRef<string>('')
 
@@ -468,53 +460,28 @@ function PromptBuilderNode({ selected, id }: NodeProps<PromptBuilderNodeData>) {
   }
 
   return (
-    <div className={`prompt-builder-node ${selected ? 'selected' : ''}`} style={{ '--prompt-color': themeColor } as React.CSSProperties}>
-      <NodeResizer isVisible={selected} minWidth={340} minHeight={320} />
+    <div className={`prompt-single-node ${selected ? 'selected' : ''}`} style={{ '--prompt-color': themeColor } as React.CSSProperties}>
+      <NodeResizer isVisible={selected} minWidth={280} minHeight={250} />
 
       <div className="prompt-node-header" style={{ background: `linear-gradient(135deg, ${themeColor} 0%, ${themeColor}dd 100%)` }}>
-        <span>🎨 프롬프트 빌더</span>
-        <span className="prompt-header-count">{totalSelected}개 선택</span>
+        <span>{titles[promptType]}</span>
+        <span className="prompt-header-count">{totalSelected}개</span>
       </div>
 
-      <div className="prompt-node-tabs">
-        <button
-          className={activeTab === 'scene' ? 'active' : ''}
-          onClick={() => setActiveTab('scene')}
-          style={{ '--tab-color': NODE_COLORS.scene } as React.CSSProperties}
-        >
-          🎬 장면
-        </button>
-        <button
-          className={activeTab === 'character' ? 'active' : ''}
-          onClick={() => setActiveTab('character')}
-          style={{ '--tab-color': NODE_COLORS.character } as React.CSSProperties}
-        >
-          🧑 캐릭터
-        </button>
-        <button
-          className={activeTab === 'props' ? 'active' : ''}
-          onClick={() => setActiveTab('props')}
-          style={{ '--tab-color': NODE_COLORS.props } as React.CSSProperties}
-        >
-          🎒 소품
-        </button>
-      </div>
-
-      <div className="prompt-node-body" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="prompt-node-body prompt-scrollable" onMouseDown={(e) => e.stopPropagation()}>
         <input
           type="text"
           className="prompt-node-input nodrag"
           value={userPrompt}
           onChange={(e) => setUserPrompt(e.target.value)}
-          placeholder="기본 프롬프트 입력..."
+          placeholder="직접 입력..."
         />
 
         <div className="prompt-node-categories nodrag">
-          {Object.entries(currentData).map(([catKey, category]) => (
+          {Object.entries(nodeData).map(([catKey, category]) => (
             <div key={catKey} className="prompt-mini-category">
               <div className="prompt-cat-header">
                 <span className="prompt-cat-title">{category.title}</span>
-                <span className="prompt-cat-count">{(selectedOptions[catKey] || []).length}개</span>
               </div>
               <div className="prompt-cat-options">
                 {category.options.map(opt => {
@@ -548,21 +515,32 @@ function PromptBuilderNode({ selected, id }: NodeProps<PromptBuilderNodeData>) {
         {combinedPrompt && (
           <div className="prompt-node-preview" style={{ borderLeftColor: themeColor }}>
             <div className="preview-header">
-              <span style={{ color: themeColor }}>📝 조합된 프롬프트</span>
+              <span style={{ color: themeColor }}>📝 프롬프트</span>
               <button className="clear-btn" onClick={handleClear} onMouseDown={(e) => e.stopPropagation()}>초기화</button>
             </div>
             <p className="preview-text">{combinedPrompt}</p>
           </div>
         )}
-
-        <div className="prompt-node-help">
-          💡 AI 생성기 노드의 왼쪽 핸들에 연결하세요
-        </div>
       </div>
 
       <Handle type="source" position={Position.Right} id="prompt-out" />
     </div>
   )
+}
+
+// 장면 프롬프트 노드
+function PromptSceneNode(props: NodeProps<SinglePromptNodeData>) {
+  return <SinglePromptNode {...props} data={{ ...props.data, promptType: 'scene' }} />
+}
+
+// 캐릭터 프롬프트 노드
+function PromptCharacterNode(props: NodeProps<SinglePromptNodeData>) {
+  return <SinglePromptNode {...props} data={{ ...props.data, promptType: 'character' }} />
+}
+
+// 소품 프롬프트 노드
+function PromptPropsNode(props: NodeProps<SinglePromptNodeData>) {
+  return <SinglePromptNode {...props} data={{ ...props.data, promptType: 'props' }} />
 }
 
 // 참조 노드 데이터
@@ -599,8 +577,9 @@ const REFERENCE_NODE_CONFIG = {
   ]},
 }
 
-// 참조 노드 컴포넌트
+// 참조 노드 컴포넌트 (통합 - 드롭다운 선택)
 function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
+  const [referenceType, setReferenceType] = useState<ReferenceNodeData['referenceType']>(data.referenceType || 'pose')
   const [image, setImage] = useState(data.image || '')
   const [strength, setStrength] = useState(data.strength || 0.8)
   const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
@@ -608,18 +587,24 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { setNodes } = useReactFlow()
 
-  const config = REFERENCE_NODE_CONFIG[data.referenceType] || REFERENCE_NODE_CONFIG.pose
+  const config = REFERENCE_NODE_CONFIG[referenceType] || REFERENCE_NODE_CONFIG.pose
   const themeColor = config.color
 
   // 데이터가 변경될 때마다 노드에 저장
   useEffect(() => {
     setNodes(nds => nds.map(n => {
       if (n.id === id) {
-        return { ...n, data: { ...n.data, image, strength, selectedOptions } }
+        return { ...n, data: { ...n.data, referenceType, image, strength, selectedOptions } }
       }
       return n
     }))
-  }, [image, strength, selectedOptions, id, setNodes])
+  }, [referenceType, image, strength, selectedOptions, id, setNodes])
+
+  // 타입 변경 시 옵션 초기화
+  const handleTypeChange = (newType: ReferenceNodeData['referenceType']) => {
+    setReferenceType(newType)
+    setSelectedOptions([])
+  }
 
   const toggleOption = (optId: string) => {
     setSelectedOptions(prev =>
@@ -650,13 +635,31 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
   return (
     <div className={`reference-node ${selected ? 'selected' : ''}`} style={{ '--ref-color': themeColor } as React.CSSProperties}>
       <Handle type="target" position={Position.Left} id="ref-in" />
-      <NodeResizer isVisible={selected} minWidth={260} minHeight={200} />
+      <NodeResizer isVisible={selected} minWidth={260} minHeight={300} />
 
       <div className="ref-node-header" style={{ backgroundColor: themeColor }}>
-        <span>{config.title}</span>
+        <span>🖼️ 이미지 참조</span>
       </div>
 
-      <div className="ref-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="ref-node-content ref-scrollable nodrag" onMouseDown={(e) => e.stopPropagation()}>
+        {/* 참조 타입 드롭다운 */}
+        <div className="ref-type-selector">
+          <label>참조 타입</label>
+          <select
+            className="nodrag"
+            value={referenceType}
+            onChange={(e) => handleTypeChange(e.target.value as ReferenceNodeData['referenceType'])}
+            style={{ borderColor: themeColor }}
+          >
+            <option value="pose">🏃 포즈</option>
+            <option value="character">👤 캐릭터</option>
+            <option value="style">🎨 스타일</option>
+            <option value="composition">📐 구도</option>
+            <option value="background">🏞️ 배경</option>
+            <option value="object">📦 오브젝트</option>
+          </select>
+        </div>
+
         {/* 이미지 드롭존 */}
         <div
           className={`ref-dropzone ${isDragging ? 'dragging' : ''}`}
@@ -724,10 +727,6 @@ function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeData>) {
             </button>
           ))}
         </div>
-
-        <div className="ref-node-help">
-          💡 오른쪽 핸들을 AI 생성기에 연결하세요
-        </div>
       </div>
 
       <Handle type="source" position={Position.Right} id="ref-out" />
@@ -764,30 +763,65 @@ const POSTPROCESS_NODE_CONFIG = {
   ]},
 }
 
-// 후처리 노드 컴포넌트
-function PostProcessNode({ data, selected }: NodeProps<PostProcessNodeData>) {
+// 후처리 노드 컴포넌트 (통합 - 드롭다운 선택)
+function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNodeData>) {
+  const [processType, setProcessType] = useState<PostProcessNodeData['processType']>(data.processType || 'removeBackground')
   const [intensity, setIntensity] = useState(data.intensity || 1.0)
   const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
+  const { setNodes } = useReactFlow()
 
-  const config = POSTPROCESS_NODE_CONFIG[data.processType] || POSTPROCESS_NODE_CONFIG.removeBackground
+  const config = POSTPROCESS_NODE_CONFIG[processType] || POSTPROCESS_NODE_CONFIG.removeBackground
   const themeColor = config.color
+
+  // 데이터가 변경될 때마다 노드에 저장
+  useEffect(() => {
+    setNodes(nds => nds.map(n => {
+      if (n.id === id) {
+        return { ...n, data: { ...n.data, processType, intensity, selectedOptions } }
+      }
+      return n
+    }))
+  }, [processType, intensity, selectedOptions, id, setNodes])
+
+  // 타입 변경 시 옵션 초기화
+  const handleTypeChange = (newType: PostProcessNodeData['processType']) => {
+    setProcessType(newType)
+    setSelectedOptions([])
+  }
 
   const toggleOption = (optId: string) => {
     setSelectedOptions(prev =>
-      prev.includes(optId) ? prev.filter(id => id !== optId) : [...prev, optId]
+      prev.includes(optId) ? prev.filter(i => i !== optId) : [...prev, optId]
     )
   }
 
   return (
     <div className={`postprocess-node ${selected ? 'selected' : ''}`} style={{ '--pp-color': themeColor } as React.CSSProperties}>
       <Handle type="target" position={Position.Left} id="pp-in" />
-      <NodeResizer isVisible={selected} minWidth={240} minHeight={160} />
+      <NodeResizer isVisible={selected} minWidth={260} minHeight={220} />
 
       <div className="pp-node-header" style={{ backgroundColor: themeColor }}>
-        <span>{config.title}</span>
+        <span>✨ 후처리</span>
       </div>
 
-      <div className="pp-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="pp-node-content pp-scrollable nodrag" onMouseDown={(e) => e.stopPropagation()}>
+        {/* 후처리 타입 드롭다운 */}
+        <div className="pp-type-selector">
+          <label>후처리 타입</label>
+          <select
+            className="nodrag"
+            value={processType}
+            onChange={(e) => handleTypeChange(e.target.value as PostProcessNodeData['processType'])}
+            style={{ borderColor: themeColor }}
+          >
+            <option value="removeBackground">🔲 배경 제거</option>
+            <option value="extractLine">✏️ 라인 추출</option>
+            <option value="materialID">🏷️ 재질맵</option>
+            <option value="upscale">🔍 업스케일</option>
+            <option value="stylize">✨ 스타일 변환</option>
+          </select>
+        </div>
+
         {/* 강도 슬라이더 */}
         <div className="pp-intensity">
           <div className="pp-intensity-label">
@@ -823,11 +857,6 @@ function PostProcessNode({ data, selected }: NodeProps<PostProcessNodeData>) {
               {selectedOptions.includes(opt.id) && '✓ '}{opt.label}
             </button>
           ))}
-        </div>
-
-        {/* 상태 표시 */}
-        <div className="pp-status">
-          {selectedOptions.length}개 옵션 선택됨
         </div>
       </div>
 
@@ -911,7 +940,9 @@ const nodeTypes = {
   shape: ShapeNode,
   board: BoardNode,
   aiGenerator: AIGeneratorNode,
-  promptBuilder: PromptBuilderNode,
+  promptScene: PromptSceneNode,
+  promptCharacter: PromptCharacterNode,
+  promptProps: PromptPropsNode,
   reference: ReferenceNode,
   postProcess: PostProcessNode,
 }
@@ -1165,13 +1196,31 @@ function WorkspaceCanvas() {
           style: { width: 320, height: 400 }
         }
         break
-      case 'promptBuilder':
+      case 'promptScene':
         newNode = {
           id: String(nodeIdCounter.current++),
-          type: 'promptBuilder',
+          type: 'promptScene',
           position,
-          data: {},
-          style: { width: 360, height: 450 }
+          data: { promptType: 'scene' },
+          style: { width: 300, height: 350 }
+        }
+        break
+      case 'promptCharacter':
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'promptCharacter',
+          position,
+          data: { promptType: 'character' },
+          style: { width: 300, height: 350 }
+        }
+        break
+      case 'promptProps':
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'promptProps',
+          position,
+          data: { promptType: 'props' },
+          style: { width: 300, height: 350 }
         }
         break
       case 'note':
@@ -1239,23 +1288,21 @@ function WorkspaceCanvas() {
         saveWorkspaceData(updatedData)
         break
       case 'reference':
-        const refType = (nodeData || 'pose') as ReferenceNodeData['referenceType']
         newNode = {
           id: String(nodeIdCounter.current++),
           type: 'reference',
           position,
-          data: { referenceType: refType, strength: 0.8, selectedOptions: [] },
-          style: { width: 280, height: 320 }
+          data: { referenceType: 'pose', strength: 0.8, selectedOptions: [] },
+          style: { width: 280, height: 400 }
         }
         break
       case 'postProcess':
-        const ppType = (nodeData || 'removeBackground') as PostProcessNodeData['processType']
         newNode = {
           id: String(nodeIdCounter.current++),
           type: 'postProcess',
           position,
-          data: { processType: ppType, intensity: 1.0, selectedOptions: [] },
-          style: { width: 260, height: 200 }
+          data: { processType: 'removeBackground', intensity: 1.0, selectedOptions: [] },
+          style: { width: 280, height: 300 }
         }
         break
       default:
@@ -1604,10 +1651,10 @@ function WorkspaceCanvas() {
             <h3>도구 (드래그하여 배치)</h3>
             <button className="add-panel-close" onClick={() => setShowAddPanel(false)}>×</button>
           </div>
-          <div className="add-panel-content">
+          <div className="add-panel-content add-panel-scrollable">
             {/* AI 도구 */}
             <div className="add-section">
-              <h4>AI 도구</h4>
+              <h4>AI 생성</h4>
               <div className="draggable-items">
                 <div
                   className="draggable-item ai-generator-drag"
@@ -1620,162 +1667,81 @@ function WorkspaceCanvas() {
                   <span className="drag-icon">🤖</span>
                   <span>AI 생성기</span>
                 </div>
-                <div
-                  className="draggable-item prompt-builder-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'promptBuilder')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🎨</span>
-                  <span>프롬프트 빌더</span>
-                </div>
               </div>
             </div>
 
-            {/* 참조 노드 */}
+            {/* 프롬프트 빌더 - 3개로 분리 */}
             <div className="add-section">
-              <h4>참조 노드</h4>
-              <div className="draggable-items reference-items">
+              <h4>프롬프트 빌더</h4>
+              <div className="draggable-items">
                 <div
-                  className="draggable-item ref-pose-drag"
+                  className="draggable-item prompt-scene-drag"
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.setData('application/reactflow-data', 'pose')
+                    e.dataTransfer.setData('application/reactflow-type', 'promptScene')
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
-                  <span className="drag-icon">🏃</span>
-                  <span>포즈</span>
+                  <span className="drag-icon">🎬</span>
+                  <span>장면</span>
                 </div>
                 <div
-                  className="draggable-item ref-char-drag"
+                  className="draggable-item prompt-character-drag"
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.setData('application/reactflow-data', 'character')
+                    e.dataTransfer.setData('application/reactflow-type', 'promptCharacter')
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
-                  <span className="drag-icon">👤</span>
+                  <span className="drag-icon">🧑</span>
                   <span>캐릭터</span>
                 </div>
                 <div
-                  className="draggable-item ref-style-drag"
+                  className="draggable-item prompt-props-drag"
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.setData('application/reactflow-data', 'style')
+                    e.dataTransfer.setData('application/reactflow-type', 'promptProps')
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
-                  <span className="drag-icon">🎨</span>
-                  <span>스타일</span>
-                </div>
-                <div
-                  className="draggable-item ref-comp-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.setData('application/reactflow-data', 'composition')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">📐</span>
-                  <span>구도</span>
-                </div>
-                <div
-                  className="draggable-item ref-bg-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.setData('application/reactflow-data', 'background')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🏞️</span>
-                  <span>배경</span>
-                </div>
-                <div
-                  className="draggable-item ref-obj-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.setData('application/reactflow-data', 'object')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">📦</span>
-                  <span>오브젝트</span>
+                  <span className="drag-icon">🎒</span>
+                  <span>소품</span>
                 </div>
               </div>
             </div>
 
-            {/* 후처리 노드 */}
+            {/* 이미지 참조 노드 - 통합 */}
             <div className="add-section">
-              <h4>후처리 노드</h4>
-              <div className="draggable-items postprocess-items">
+              <h4>이미지 참조</h4>
+              <div className="draggable-items">
                 <div
-                  className="draggable-item pp-remove-drag"
+                  className="draggable-item reference-drag"
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
-                    e.dataTransfer.setData('application/reactflow-data', 'removeBackground')
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
-                  <span className="drag-icon">🔲</span>
-                  <span>배경 제거</span>
+                  <span className="drag-icon">🖼️</span>
+                  <span>이미지 참조</span>
                 </div>
+              </div>
+            </div>
+
+            {/* 후처리 노드 - 통합 */}
+            <div className="add-section">
+              <h4>후처리</h4>
+              <div className="draggable-items">
                 <div
-                  className="draggable-item pp-line-drag"
+                  className="draggable-item postprocess-drag"
                   draggable
                   onDragStart={(e) => {
                     e.dataTransfer.setData('application/reactflow-type', 'postProcess')
-                    e.dataTransfer.setData('application/reactflow-data', 'extractLine')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">✏️</span>
-                  <span>라인 추출</span>
-                </div>
-                <div
-                  className="draggable-item pp-mat-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
-                    e.dataTransfer.setData('application/reactflow-data', 'materialID')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🏷️</span>
-                  <span>재질맵</span>
-                </div>
-                <div
-                  className="draggable-item pp-up-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
-                    e.dataTransfer.setData('application/reactflow-data', 'upscale')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🔍</span>
-                  <span>업스케일</span>
-                </div>
-                <div
-                  className="draggable-item pp-sty-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
-                    e.dataTransfer.setData('application/reactflow-data', 'stylize')
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
                   <span className="drag-icon">✨</span>
-                  <span>스타일 변환</span>
+                  <span>후처리</span>
                 </div>
               </div>
             </div>

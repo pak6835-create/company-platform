@@ -8,7 +8,13 @@
       "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" checkout master)",
       "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" merge cranky-wright)",
       "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add -A)",
-      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix React Router basename for GitHub Pages\n\nAdd basename to BrowserRouter to handle /company-platform/ base URL\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix React Router basename for GitHub Pages\n\nAdd basename to BrowserRouter to handle /company-platform/ base URL\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\OneDrive\\바탕 화면\\company-platform\" merge cranky-wright)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\OneDrive\\바탕 화면\\company-platform\" push)",
+      "Bash(npm run build:*)",
+      "Bash(npx vite build:*)",
+      "Bash(npm install)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nRestructure workspace nodes for better UX\n\n- Fix API error: Direct Gemini API call instead of Netlify functions\n- Add scrollable content for all nodes\n- Split PromptBuilder into 3 separate nodes (Scene/Character/Props)\n- Merge 6 reference nodes into 1 with dropdown selector\n- Merge 5 post-process nodes into 1 with dropdown selector\n- Add CSS for scrollable containers and new node styles\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
