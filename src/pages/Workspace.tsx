@@ -436,6 +436,15 @@ function WorkspaceCanvas() {
             style: { width: 280, height: 300 },
           }
           break
+        case 'characterMaker':
+          newNode = {
+            id: getNewNodeId(),
+            type: 'characterMaker',
+            position,
+            data: { selections: {}, combinedPrompt: '' },
+            style: { width: 420, height: 550 },
+          }
+          break
         default:
           return
       }
@@ -641,6 +650,24 @@ function WorkspaceCanvas() {
                 >
                   <span className="drag-icon">🖼️</span>
                   <span>이미지 참조</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 캐릭터 메이커 */}
+            <div className="add-section">
+              <h4>캐릭터 메이커</h4>
+              <div className="draggable-items">
+                <div
+                  className="draggable-item character-maker-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'characterMaker')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🎭</span>
+                  <span>캐릭터 메이커</span>
                 </div>
               </div>
             </div>

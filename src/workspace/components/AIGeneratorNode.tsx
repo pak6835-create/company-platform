@@ -173,14 +173,19 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       <div className="ai-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
         {hasConnections && (
           <div className="ai-node-connections">
-            <div className="connections-title">📥 연결된 노드:</div>
-            {connectedPrompts && (
-              <div className="connection-item prompt-connection">
-                <span className="conn-icon">🎨</span>
-                <span className="conn-label">프롬프트 빌더</span>
-                <span className="conn-status">✓</span>
-              </div>
-            )}
+            <div className="connections-title">📥 연결된 노드 ({connectedSources.length}):</div>
+            {connectedSources
+              .filter((n) => n?.type?.startsWith('prompt'))
+              .map((n, i) => (
+                <div key={i} className="connection-item prompt-connection">
+                  <span className="conn-icon">🎨</span>
+                  <span className="conn-label">{n?.type?.replace('prompt', '')}</span>
+                  <span className="conn-status">{n?.data?.combinedPrompt ? '✓' : '⚠️'}</span>
+                  {n?.data?.combinedPrompt && (
+                    <div className="conn-preview">{n.data.combinedPrompt.slice(0, 30)}...</div>
+                  )}
+                </div>
+              ))}
             {connectedRefs.map((ref, i) => (
               <div key={i} className={`connection-item ref-connection ${ref.hasImage ? 'has-image' : ''}`}>
                 <span className="conn-icon">🖼️</span>
