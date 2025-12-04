@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
+import { useState, useCallback, useMemo } from 'react'
+import { NodeProps, NodeResizer, Handle, Position, useStore } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
 export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
@@ -9,32 +9,37 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
-  const { getNodes, getEdges } = useReactFlow()
 
-  // 연결된 노드 데이터 수집
-  const edges = useStore((s) => s.edges)
-  const nodes = useStore((s) => s.nodes)
+  // 연결된 노드 데이터 수집 - 안전하게 접근
+  const edges = useStore((s) => s.edges || [])
+  const nodes = useStore((s) => s.nodes || [])
 
-  const connectedSources = edges
-    .filter((e) => e.target === id)
-    .map((e) => {
-      const sourceNode = nodes.find((n) => n.id === e.source)
-      return sourceNode
-    })
-    .filter(Boolean)
+  // useMemo로 연결 정보 계산 (안전한 접근)
+  const { connectedSources, connectedPrompts, connectedRefs } = useMemo(() => {
+    if (!Array.isArray(edges) || !Array.isArray(nodes)) {
+      return { connectedSources: [], connectedPrompts: '', connectedRefs: [] }
+    }
 
-  const connectedPrompts = connectedSources
-    .filter((n) => n?.type?.startsWith('prompt'))
-    .map((n) => n?.data?.combinedPrompt)
-    .filter(Boolean)
-    .join(', ')
+    const sources = edges
+      .filter((e) => e && e.target === id)
+      .map((e) => nodes.find((n) => n && n.id === e.source))
+      .filter(Boolean)
 
-  const connectedRefs = connectedSources
-    .filter((n) => n?.type === 'reference')
-    .map((n) => ({
-      type: n?.data?.referenceType || 'unknown',
-      hasImage: !!n?.data?.image,
-    }))
+    const prompts = sources
+      .filter((n) => n?.type?.startsWith('prompt'))
+      .map((n) => n?.data?.combinedPrompt)
+      .filter(Boolean)
+      .join(', ')
+
+    const refs = sources
+      .filter((n) => n?.type === 'reference')
+      .map((n) => ({
+        type: n?.data?.referenceType || 'unknown',
+        hasImage: !!n?.data?.image,
+      }))
+
+    return { connectedSources: sources, connectedPrompts: prompts, connectedRefs: refs }
+  }, [edges, nodes, id])
 
   // 최종 프롬프트 생성
   const getFinalPrompt = useCallback(() => {
