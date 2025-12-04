@@ -211,16 +211,17 @@ function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
   const [error, setError] = useState('')
+  const { getNodes } = useReactFlow()
 
-  // ReactFlow에서 edges와 nodes 가져오기
+  // ReactFlow에서 edges 가져오기
   const edges = useStore((state) => state.edges)
-  const nodes = useStore((state) => state.nodes)
+  const storeNodes = getNodes()
 
   // 이 노드에 연결된 소스 노드들 찾기
   const connectedSources = edges
     .filter(edge => edge.target === id)
     .map(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source)
+      const sourceNode = storeNodes.find(n => n.id === edge.source)
       return sourceNode
     })
     .filter(Boolean)
@@ -404,7 +405,7 @@ const FULL_NODE_DATA = {
 }
 
 // 프롬프트 빌더 노드 (캔버스에 배치되는 카드형) - 전체 데이터 사용
-function PromptBuilderNode({ data, selected, id }: NodeProps<PromptBuilderNodeData>) {
+function PromptBuilderNode({ selected, id }: NodeProps<PromptBuilderNodeData>) {
   const [activeTab, setActiveTab] = useState<'scene' | 'character' | 'props'>('scene')
   const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string[] }>({})
   const [userPrompt, setUserPrompt] = useState('')
@@ -1127,87 +1128,6 @@ function WorkspaceCanvas() {
     setNodes((nds) => [...nds, newNode])
   }
 
-  const addNote = (color: string = '#fef3c7') => {
-    const newNode: Node<NoteNodeData> = {
-      id: String(nodeIdCounter.current++),
-      type: 'note',
-      position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: color },
-      style: { width: 200, height: 150 }
-    }
-    setNodes((nds) => [...nds, newNode])
-    setShowAddPanel(false)
-  }
-
-  const addText = () => {
-    const newNode: Node<TextNodeData> = {
-      id: String(nodeIdCounter.current++),
-      type: 'text',
-      position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' },
-      style: { width: 150, height: 50 }
-    }
-    setNodes((nds) => [...nds, newNode])
-    setShowAddPanel(false)
-  }
-
-  const addShape = (shape: 'rectangle' | 'circle' | 'triangle', color: string = '#3b82f6') => {
-    const newNode: Node<ShapeNodeData> = {
-      id: String(nodeIdCounter.current++),
-      type: 'shape',
-      position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: { shape, backgroundColor: color, width: 100, height: 100 },
-      style: { width: 100, height: 100 }
-    }
-    setNodes((nds) => [...nds, newNode])
-    setShowAddPanel(false)
-  }
-
-  // 새 보드 생성
-  const addBoard = useCallback(() => {
-    const boardId = `board-${nodeIdCounter.current++}`
-
-    // 새 보드 데이터 생성
-    const newBoard: Board = {
-      id: boardId,
-      name: '',
-      parentId: workspaceData.currentBoardId,
-      nodes: [],
-      edges: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-
-    // 보드 노드 생성
-    const newNode: Node<BoardNodeData> = {
-      id: `node-${boardId}`,
-      type: 'board',
-      position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-      data: {
-        boardId,
-        name: '',
-        itemCount: 0,
-        onNameChange: (id: string, name: string) => {
-          boardNameChangeRef.current?.(id, name)
-        }
-      }
-    }
-
-    // 워크스페이스 데이터 업데이트 (먼저 노드 추가)
-    setNodes((nds) => [...nds, newNode])
-
-    // 보드 데이터 업데이트
-    const updatedData = {
-      ...workspaceData,
-      boards: {
-        ...workspaceData.boards,
-        [boardId]: newBoard
-      }
-    }
-    setWorkspaceData(updatedData)
-    saveWorkspaceData(updatedData)
-    setShowAddPanel(false)
-  }, [workspaceData, setNodes])
 
   // 드래그 앤 드롭 핸들러
   const onDragOver = useCallback((event: React.DragEvent) => {

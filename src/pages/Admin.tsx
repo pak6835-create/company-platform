@@ -4,6 +4,27 @@ import './Admin.css'
 
 type Tab = 'company' | 'hero' | 'contact' | 'portfolio'
 
+// 타입 정의
+interface CompanyData {
+  name: string
+  tagline: string
+  description: string
+  logo: string
+}
+
+interface HeroData {
+  title: string
+  subtitle: string
+  description: string
+}
+
+interface ContactData {
+  email: string
+  phone: string
+  kakao: string
+  businessHours: { weekday: string; lunch: string; weekend: string }
+}
+
 function Admin() {
   const { data, updateCompany, updateHero, updateContact, addPortfolioItem, removePortfolioItem, updatePortfolioItem } = useSite()
   const [activeTab, setActiveTab] = useState<Tab>('company')
@@ -106,8 +127,8 @@ function Admin() {
 
 // 회사 정보 섹션
 function CompanySection({ data, onUpdate, onSave }: {
-  data: { name: string; tagline: string; description: string; logo: string }
-  onUpdate: (data: Partial<typeof data>) => void
+  data: CompanyData
+  onUpdate: (data: Partial<CompanyData>) => void
   onSave: () => void
 }) {
   const handleSubmit = (e: React.FormEvent) => {
@@ -163,8 +184,8 @@ function CompanySection({ data, onUpdate, onSave }: {
 
 // 히어로 섹션
 function HeroSection({ data, onUpdate, onSave }: {
-  data: { title: string; subtitle: string; description: string }
-  onUpdate: (data: Partial<typeof data>) => void
+  data: HeroData
+  onUpdate: (data: Partial<HeroData>) => void
   onSave: () => void
 }) {
   const handleSubmit = (e: React.FormEvent) => {
@@ -211,8 +232,8 @@ function HeroSection({ data, onUpdate, onSave }: {
 
 // 연락처 섹션
 function ContactSection({ data, onUpdate, onSave }: {
-  data: { email: string; phone: string; kakao: string; businessHours: { weekday: string; lunch: string; weekend: string } }
-  onUpdate: (data: Partial<typeof data>) => void
+  data: ContactData
+  onUpdate: (data: Partial<ContactData>) => void
   onSave: () => void
 }) {
   const handleSubmit = (e: React.FormEvent) => {
