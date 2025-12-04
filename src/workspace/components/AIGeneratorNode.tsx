@@ -142,7 +142,6 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
           <label>모델</label>
           <select className="nodrag" value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
             <option value="gemini-2.0-flash-exp-image-generation">Gemini 2.0 Flash (이미지)</option>
-            <option value="imagen-3.0-generate-002">Imagen 3</option>
           </select>
         </div>
 
