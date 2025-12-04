@@ -1607,3 +1607,279 @@
 .prompt-builder-node .react-flow__handle {
   background: #9c27b0;
 }
+
+/* ==================== 참조 노드 스타일 ==================== */
+.reference-node {
+  width: 260px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border: 2px solid #eee;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.reference-node.selected {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-color: var(--ref-color);
+}
+
+.ref-node-header {
+  padding: 10px 14px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ref-node-content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ref-dropzone {
+  width: 100%;
+  min-height: 100px;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.ref-dropzone.dragging {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.ref-preview-img {
+  width: 100%;
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.ref-remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ref-remove-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.ref-drop-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.ref-drop-text {
+  font-size: 12px;
+  color: #888;
+}
+
+.ref-strength {
+  width: 100%;
+}
+
+.ref-strength-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.ref-strength input[type="range"] {
+  width: 100%;
+}
+
+.ref-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ref-opt-btn {
+  padding: 5px 10px;
+  border: 2px solid #ddd;
+  border-radius: 14px;
+  background: white;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ref-opt-btn:hover {
+  border-color: var(--ref-color);
+}
+
+.ref-opt-btn.active {
+  font-weight: 600;
+}
+
+/* ==================== 후처리 노드 스타일 ==================== */
+.postprocess-node {
+  width: 240px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border: 2px solid #eee;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.postprocess-node.selected {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-color: var(--pp-color);
+}
+
+.pp-node-header {
+  padding: 10px 14px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.pp-node-content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pp-intensity {
+  width: 100%;
+}
+
+.pp-intensity-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.pp-intensity input[type="range"] {
+  width: 100%;
+}
+
+.pp-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pp-opt-btn {
+  padding: 5px 10px;
+  border: 2px solid #ddd;
+  border-radius: 14px;
+  background: white;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pp-opt-btn:hover {
+  border-color: var(--pp-color);
+}
+
+.pp-opt-btn.active {
+  font-weight: 600;
+}
+
+.pp-status {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  padding: 6px;
+  background: #f9f9f9;
+  border-radius: 6px;
+}
+
+/* 참조/후처리 노드 핸들 스타일 */
+.reference-node .react-flow__handle,
+.postprocess-node .react-flow__handle {
+  width: 12px;
+  height: 12px;
+  background: var(--ref-color, #4CAF50);
+  border: 2px solid white;
+}
+
+.postprocess-node .react-flow__handle {
+  background: var(--pp-color, #E91E63);
+}
+
+/* 추가 패널 - 참조/후처리 드래그 아이템 */
+.reference-items,
+.postprocess-items {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.reference-items .draggable-item,
+.postprocess-items .draggable-item {
+  flex-direction: column;
+  padding: 8px 6px;
+  font-size: 11px;
+}
+
+.reference-items .draggable-item .drag-icon,
+.postprocess-items .draggable-item .drag-icon {
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+
+/* 참조 노드 드래그 아이템 색상 */
+.ref-pose-drag { border-color: #4CAF50 !important; }
+.ref-pose-drag:hover { background: rgba(76, 175, 80, 0.1); }
+
+.ref-char-drag { border-color: #2196F3 !important; }
+.ref-char-drag:hover { background: rgba(33, 150, 243, 0.1); }
+
+.ref-style-drag { border-color: #9C27B0 !important; }
+.ref-style-drag:hover { background: rgba(156, 39, 176, 0.1); }
+
+.ref-comp-drag { border-color: #FF9800 !important; }
+.ref-comp-drag:hover { background: rgba(255, 152, 0, 0.1); }
+
+.ref-bg-drag { border-color: #00BCD4 !important; }
+.ref-bg-drag:hover { background: rgba(0, 188, 212, 0.1); }
+
+.ref-obj-drag { border-color: #795548 !important; }
+.ref-obj-drag:hover { background: rgba(121, 85, 72, 0.1); }
+
+/* 후처리 노드 드래그 아이템 색상 */
+.pp-remove-drag { border-color: #E91E63 !important; }
+.pp-remove-drag:hover { background: rgba(233, 30, 99, 0.1); }
+
+.pp-line-drag { border-color: #607D8B !important; }
+.pp-line-drag:hover { background: rgba(96, 125, 139, 0.1); }
+
+.pp-mat-drag { border-color: #9C27B0 !important; }
+.pp-mat-drag:hover { background: rgba(156, 39, 176, 0.1); }
+
+.pp-up-drag { border-color: #2196F3 !important; }
+.pp-up-drag:hover { background: rgba(33, 150, 243, 0.1); }
+
+.pp-sty-drag { border-color: #FF9800 !important; }
+.pp-sty-drag:hover { background: rgba(255, 152, 0, 0.1); }

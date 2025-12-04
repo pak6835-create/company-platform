@@ -95,6 +95,21 @@ interface PromptBuilderNodeData {
   onPromptChange?: (prompt: string) => void
 }
 
+// 참조 노드 데이터
+interface ReferenceNodeData {
+  referenceType: 'pose' | 'character' | 'style' | 'composition' | 'background' | 'object'
+  image?: string
+  strength?: number
+  selectedOptions?: string[]
+}
+
+// 후처리 노드 데이터
+interface PostProcessNodeData {
+  processType: 'removeBackground' | 'extractLine' | 'materialID' | 'upscale' | 'stylize'
+  intensity?: number
+  selectedOptions?: string[]
+}
+
 // 커스텀 이미지 노드
 function ImageNode({ data, selected }: NodeProps<ImageNodeData>) {
   return (
@@ -420,6 +435,258 @@ function PromptBuilderNode({ data, selected }: NodeProps<PromptBuilderNodeData>)
   )
 }
 
+// 참조 노드 데이터
+const REFERENCE_NODE_CONFIG = {
+  pose: { title: '🏃 포즈 참조', color: '#4CAF50', options: [
+    { id: 'pose_exact', label: '정확히', prompt: 'exact same pose as reference' },
+    { id: 'pose_similar', label: '비슷하게', prompt: 'similar pose to reference' },
+    { id: 'pose_mirror', label: '좌우반전', prompt: 'mirrored pose from reference' },
+  ]},
+  character: { title: '👤 캐릭터 참조', color: '#2196F3', options: [
+    { id: 'char_same', label: '동일인물', prompt: 'same character, consistent appearance' },
+    { id: 'char_outfit', label: '의상만변경', prompt: 'same character, different outfit' },
+    { id: 'char_emotion', label: '표정만변경', prompt: 'same character, different expression' },
+  ]},
+  style: { title: '🎨 스타일 참조', color: '#9C27B0', options: [
+    { id: 'style_exact', label: '동일스타일', prompt: 'exact same art style as reference' },
+    { id: 'style_color', label: '색감만', prompt: 'same color palette as reference' },
+    { id: 'style_lineart', label: '선스타일', prompt: 'same line art style as reference' },
+  ]},
+  composition: { title: '📐 구도 참조', color: '#FF9800', options: [
+    { id: 'comp_exact', label: '동일구도', prompt: 'exact same composition as reference' },
+    { id: 'comp_layout', label: '레이아웃만', prompt: 'same layout as reference' },
+    { id: 'comp_perspective', label: '원근법', prompt: 'same perspective as reference' },
+  ]},
+  background: { title: '🏞️ 배경 참조', color: '#00BCD4', options: [
+    { id: 'bg_same', label: '동일배경', prompt: 'exact same background as reference' },
+    { id: 'bg_time', label: '시간만변경', prompt: 'same background, different time of day' },
+    { id: 'bg_weather', label: '날씨만변경', prompt: 'same background, different weather' },
+  ]},
+  object: { title: '📦 오브젝트 참조', color: '#795548', options: [
+    { id: 'obj_same', label: '동일물체', prompt: 'exact same object as reference' },
+    { id: 'obj_style', label: '스타일만', prompt: 'same object style as reference' },
+    { id: 'obj_angle', label: '각도변경', prompt: 'same object from different angle' },
+  ]},
+}
+
+// 참조 노드 컴포넌트
+function ReferenceNode({ data, selected }: NodeProps<ReferenceNodeData>) {
+  const [image, setImage] = useState(data.image || '')
+  const [strength, setStrength] = useState(data.strength || 0.8)
+  const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const config = REFERENCE_NODE_CONFIG[data.referenceType] || REFERENCE_NODE_CONFIG.pose
+  const themeColor = config.color
+
+  const toggleOption = (optId: string) => {
+    setSelectedOptions(prev =>
+      prev.includes(optId) ? prev.filter(id => id !== optId) : [...prev, optId]
+    )
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (ev) => setImage(ev.target?.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (ev) => setImage(ev.target?.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  return (
+    <div className={`reference-node ${selected ? 'selected' : ''}`} style={{ '--ref-color': themeColor } as React.CSSProperties}>
+      <Handle type="target" position={Position.Left} id="ref-in" />
+      <NodeResizer isVisible={selected} minWidth={260} minHeight={200} />
+
+      <div className="ref-node-header" style={{ backgroundColor: themeColor }}>
+        <span>{config.title}</span>
+      </div>
+
+      <div className="ref-node-content">
+        {/* 이미지 드롭존 */}
+        <div
+          className={`ref-dropzone ${isDragging ? 'dragging' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => !image && fileInputRef.current?.click()}
+          style={{ borderColor: isDragging ? themeColor : '#ddd' }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+          {image ? (
+            <>
+              <img src={image} alt="Reference" className="ref-preview-img" draggable={false} />
+              <button className="ref-remove-btn" onClick={(e) => { e.stopPropagation(); setImage('') }}>×</button>
+            </>
+          ) : (
+            <>
+              <span className="ref-drop-icon">📥</span>
+              <span className="ref-drop-text">이미지 드롭 또는 클릭</span>
+            </>
+          )}
+        </div>
+
+        {/* 참조 강도 슬라이더 */}
+        {image && (
+          <div className="ref-strength">
+            <div className="ref-strength-label">
+              <span>참조 강도</span>
+              <span>{Math.round(strength * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={strength}
+              onChange={(e) => setStrength(parseFloat(e.target.value))}
+              style={{ accentColor: themeColor }}
+            />
+          </div>
+        )}
+
+        {/* 옵션 버튼들 */}
+        <div className="ref-options">
+          {config.options.map(opt => (
+            <button
+              key={opt.id}
+              className={`ref-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}
+              onClick={() => toggleOption(opt.id)}
+              style={{
+                borderColor: selectedOptions.includes(opt.id) ? themeColor : '#ddd',
+                backgroundColor: selectedOptions.includes(opt.id) ? `${themeColor}20` : '#fff',
+                color: selectedOptions.includes(opt.id) ? themeColor : '#666',
+              }}
+            >
+              {selectedOptions.includes(opt.id) && '✓ '}{opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Handle type="source" position={Position.Right} id="ref-out" />
+    </div>
+  )
+}
+
+// 후처리 노드 데이터
+const POSTPROCESS_NODE_CONFIG = {
+  removeBackground: { title: '🔲 배경 제거', color: '#E91E63', options: [
+    { id: 'bg_auto', label: '자동감지', prompt: 'automatic background removal' },
+    { id: 'bg_subject', label: '주요피사체', prompt: 'keep main subject only' },
+    { id: 'bg_soft', label: '부드러운엣지', prompt: 'soft edge background removal' },
+  ]},
+  extractLine: { title: '✏️ 라인 추출', color: '#607D8B', options: [
+    { id: 'line_thin', label: '가는선', prompt: 'thin line art extraction' },
+    { id: 'line_medium', label: '중간선', prompt: 'medium line art extraction' },
+    { id: 'line_thick', label: '굵은선', prompt: 'thick line art extraction' },
+  ]},
+  materialID: { title: '🏷️ 재질맵', color: '#9C27B0', options: [
+    { id: 'mat_skin', label: '피부', prompt: 'skin material separation' },
+    { id: 'mat_hair', label: '머리카락', prompt: 'hair material separation' },
+    { id: 'mat_cloth', label: '옷', prompt: 'clothing material separation' },
+  ]},
+  upscale: { title: '🔍 업스케일', color: '#2196F3', options: [
+    { id: 'up_2x', label: '2배', prompt: '2x upscale' },
+    { id: 'up_4x', label: '4배', prompt: '4x upscale' },
+    { id: 'up_detail', label: '디테일강화', prompt: 'detail enhancement upscale' },
+  ]},
+  stylize: { title: '✨ 스타일 변환', color: '#FF9800', options: [
+    { id: 'sty_anime', label: '애니메이션', prompt: 'convert to anime style' },
+    { id: 'sty_watercolor', label: '수채화', prompt: 'convert to watercolor style' },
+    { id: 'sty_pixel', label: '픽셀', prompt: 'convert to pixel art' },
+  ]},
+}
+
+// 후처리 노드 컴포넌트
+function PostProcessNode({ data, selected }: NodeProps<PostProcessNodeData>) {
+  const [intensity, setIntensity] = useState(data.intensity || 1.0)
+  const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
+
+  const config = POSTPROCESS_NODE_CONFIG[data.processType] || POSTPROCESS_NODE_CONFIG.removeBackground
+  const themeColor = config.color
+
+  const toggleOption = (optId: string) => {
+    setSelectedOptions(prev =>
+      prev.includes(optId) ? prev.filter(id => id !== optId) : [...prev, optId]
+    )
+  }
+
+  return (
+    <div className={`postprocess-node ${selected ? 'selected' : ''}`} style={{ '--pp-color': themeColor } as React.CSSProperties}>
+      <Handle type="target" position={Position.Left} id="pp-in" />
+      <NodeResizer isVisible={selected} minWidth={240} minHeight={160} />
+
+      <div className="pp-node-header" style={{ backgroundColor: themeColor }}>
+        <span>{config.title}</span>
+      </div>
+
+      <div className="pp-node-content">
+        {/* 강도 슬라이더 */}
+        <div className="pp-intensity">
+          <div className="pp-intensity-label">
+            <span>적용 강도</span>
+            <span>{Math.round(intensity * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={intensity}
+            onChange={(e) => setIntensity(parseFloat(e.target.value))}
+            style={{ accentColor: themeColor }}
+          />
+        </div>
+
+        {/* 옵션 버튼들 */}
+        <div className="pp-options">
+          {config.options.map(opt => (
+            <button
+              key={opt.id}
+              className={`pp-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}
+              onClick={() => toggleOption(opt.id)}
+              style={{
+                borderColor: selectedOptions.includes(opt.id) ? themeColor : '#ddd',
+                backgroundColor: selectedOptions.includes(opt.id) ? `${themeColor}20` : '#fff',
+                color: selectedOptions.includes(opt.id) ? themeColor : '#666',
+              }}
+            >
+              {selectedOptions.includes(opt.id) && '✓ '}{opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 상태 표시 */}
+        <div className="pp-status">
+          {selectedOptions.length}개 옵션 선택됨
+        </div>
+      </div>
+
+      <Handle type="source" position={Position.Right} id="pp-out" />
+    </div>
+  )
+}
+
 // 보드 노드 (심플한 폴더 아이콘) - 더블클릭으로 진입
 function BoardNode({ data, selected }: NodeProps<BoardNodeData>) {
   const [isEditing, setIsEditing] = useState(false)
@@ -496,6 +763,8 @@ const nodeTypes = {
   board: BoardNode,
   aiGenerator: AIGeneratorNode,
   promptBuilder: PromptBuilderNode,
+  reference: ReferenceNode,
+  postProcess: PostProcessNode,
 }
 
 // 노트 색상 옵션
@@ -937,6 +1206,24 @@ function WorkspaceCanvas() {
         setWorkspaceData(updatedData)
         saveWorkspaceData(updatedData)
         break
+      case 'reference':
+        const refType = (nodeData || 'pose') as ReferenceNodeData['referenceType']
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'reference',
+          position,
+          data: { referenceType: refType, strength: 0.8, selectedOptions: [] }
+        }
+        break
+      case 'postProcess':
+        const ppType = (nodeData || 'removeBackground') as PostProcessNodeData['processType']
+        newNode = {
+          id: String(nodeIdCounter.current++),
+          type: 'postProcess',
+          position,
+          data: { processType: ppType, intensity: 1.0, selectedOptions: [] }
+        }
+        break
       default:
         return
     }
@@ -1336,6 +1623,152 @@ function WorkspaceCanvas() {
                 >
                   <span className="drag-icon">🎨</span>
                   <span>프롬프트 빌더</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 참조 노드 */}
+            <div className="add-section">
+              <h4>참조 노드</h4>
+              <div className="draggable-items reference-items">
+                <div
+                  className="draggable-item ref-pose-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
+                    e.dataTransfer.setData('application/reactflow-data', 'pose')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🏃</span>
+                  <span>포즈</span>
+                </div>
+                <div
+                  className="draggable-item ref-char-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
+                    e.dataTransfer.setData('application/reactflow-data', 'character')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">👤</span>
+                  <span>캐릭터</span>
+                </div>
+                <div
+                  className="draggable-item ref-style-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
+                    e.dataTransfer.setData('application/reactflow-data', 'style')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🎨</span>
+                  <span>스타일</span>
+                </div>
+                <div
+                  className="draggable-item ref-comp-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
+                    e.dataTransfer.setData('application/reactflow-data', 'composition')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">📐</span>
+                  <span>구도</span>
+                </div>
+                <div
+                  className="draggable-item ref-bg-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
+                    e.dataTransfer.setData('application/reactflow-data', 'background')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🏞️</span>
+                  <span>배경</span>
+                </div>
+                <div
+                  className="draggable-item ref-obj-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'reference')
+                    e.dataTransfer.setData('application/reactflow-data', 'object')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">📦</span>
+                  <span>오브젝트</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 후처리 노드 */}
+            <div className="add-section">
+              <h4>후처리 노드</h4>
+              <div className="draggable-items postprocess-items">
+                <div
+                  className="draggable-item pp-remove-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
+                    e.dataTransfer.setData('application/reactflow-data', 'removeBackground')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🔲</span>
+                  <span>배경 제거</span>
+                </div>
+                <div
+                  className="draggable-item pp-line-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
+                    e.dataTransfer.setData('application/reactflow-data', 'extractLine')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">✏️</span>
+                  <span>라인 추출</span>
+                </div>
+                <div
+                  className="draggable-item pp-mat-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
+                    e.dataTransfer.setData('application/reactflow-data', 'materialID')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🏷️</span>
+                  <span>재질맵</span>
+                </div>
+                <div
+                  className="draggable-item pp-up-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
+                    e.dataTransfer.setData('application/reactflow-data', 'upscale')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🔍</span>
+                  <span>업스케일</span>
+                </div>
+                <div
+                  className="draggable-item pp-sty-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
+                    e.dataTransfer.setData('application/reactflow-data', 'stylize')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">✨</span>
+                  <span>스타일 변환</span>
                 </div>
               </div>
             </div>
