@@ -310,7 +310,7 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
       style={{ '--pp-color': themeColor } as React.CSSProperties}
     >
       <Handle type="target" position={Position.Left} id="pp-in" />
-      <NodeResizer isVisible={selected} minWidth={280} minHeight={300} />
+      <NodeResizer isVisible={selected} minWidth={300} minHeight={500} />
 
       <div className="pp-node-header" style={{ backgroundColor: themeColor }}>
         <span>✨ 후처리</span>

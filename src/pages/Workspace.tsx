@@ -396,7 +396,7 @@ function WorkspaceCanvas() {
             type: 'postProcess',
             position,
             data: { processType: 'removeBackground', intensity: 0.8 },
-            style: { width: 300, height: 450 },
+            style: { width: 320, height: 550 },
           }
           break
         default:
