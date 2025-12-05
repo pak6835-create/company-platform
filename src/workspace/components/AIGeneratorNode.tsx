@@ -76,18 +76,23 @@ const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, stri
     position: ['오른손', '왼손', '양손', '등에', '허리에'],
   },
   pose: {
-    category: ['기본', '전투', '일상', '감정', '액션'],
-    poses: {
-      '기본': ['서있기', '앉기', '무릎꿇기', '누워있기'],
-      '전투': ['검 들기', '방어 자세', '공격 자세', '마법 시전'],
-      '일상': ['걷기', '손 흔들기', '팔짱', '주머니에 손'],
-      '감정': ['기쁨', '슬픔', '분노', '놀람'],
-      '액션': ['달리기', '점프', '회전', '착지'],
-    },
-    angle: ['정면', '측면', '뒷면', '3/4'],
-    direction: ['왼쪽 보기', '정면 보기', '오른쪽 보기'],
+    angle: ['정면', '측면', '후면'],  // 간소화: 기본 스탠딩 포즈, 앵글만 선택
   },
 }
+
+// 해상도 옵션
+const RESOLUTION_OPTIONS = [
+  { id: '1k', name: '1K (1024px)', size: 1024 },
+  { id: '2k', name: '2K (2048px)', size: 2048 },
+  { id: '4k', name: '4K (4096px)', size: 4096 },
+]
+
+// 종횡비 옵션
+const ASPECT_RATIO_OPTIONS = [
+  { id: '16:9', name: '16:9 (가로)', width: 16, height: 9 },
+  { id: '1:1', name: '1:1 (정사각)', width: 1, height: 1 },
+  { id: '9:16', name: '9:16 (세로)', width: 9, height: 16 },
+]
 
 // Gemini 이미지 생성 모델 목록 (최신순)
 // 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
@@ -107,7 +112,7 @@ const DEFAULT_CHARACTER = {
   shoes: { item: '운동화' },
   accessory: { head: '없음', neck: '없음', hands: '없음', other: '없음' },
   weapon: { category: '없음', item: '', position: '오른손' },
-  pose: { category: '기본', pose: '서있기', angle: '3/4', direction: '정면 보기' },
+  pose: { angle: '정면' },  // 간소화: 스탠딩 포즈 고정, 앵글만 선택
 }
 
 // 어셋 라이브러리 이벤트
@@ -137,6 +142,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
   const [generateTransparent, setGenerateTransparent] = useState(true) // 투명 배경 생성 옵션
   const [generationStatus, setGenerationStatus] = useState('')
+  const [resolution, setResolution] = useState('2k') // 해상도
+  const [aspectRatio, setAspectRatio] = useState('16:9') // 종횡비
 
   // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
   useEffect(() => {
@@ -171,32 +178,15 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   // ==================== 프롬프트 자동 생성 ====================
 
   const generatedPrompt = useMemo(() => {
-    // 포즈/앵글 매핑 (한국어 → 영어)
-    const poseMap: { [key: string]: string } = {
-      '서있기': 'standing',
-      '앉기': 'sitting',
-      '달리기': 'running',
-      '점프': 'jumping',
-      '걷기': 'walking',
-      'T포즈': 'T-pose with arms extended horizontally',
-      'A포즈': 'A-pose with arms slightly away from body',
-    }
+    // 앵글 매핑 (한국어 → 영어)
     const angleMap: { [key: string]: string } = {
       '정면': 'front view',
-      '측면': 'side view',
-      '뒷면': 'back view',
-      '3/4': 'three-quarter view',
-    }
-    const directionMap: { [key: string]: string } = {
-      '왼쪽 보기': 'looking left',
-      '정면 보기': 'looking straight ahead',
-      '오른쪽 보기': 'looking right',
+      '측면': 'side view (profile)',
+      '후면': 'back view',
     }
 
     const gender = character.base.gender === '남성' ? 'male' : 'female'
-    const pose = poseMap[character.pose.pose] || character.pose.pose
-    const angle = angleMap[character.pose.angle] || character.pose.angle
-    const direction = directionMap[character.pose.direction] || ''
+    const angle = angleMap[character.pose.angle] || 'front view'
 
     // 의상 조합
     const outfit = []
@@ -214,25 +204,37 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     // 무기
     let weaponDesc = ''
     if (character.weapon.category !== '없음' && character.weapon.item) {
-      weaponDesc = `holding ${character.weapon.item}`
+      weaponDesc = `holding ${character.weapon.item} in ${character.weapon.position === '양손' ? 'both hands' : character.weapon.position === '등에' ? 'back' : character.weapon.position === '허리에' ? 'waist' : character.weapon.position === '왼손' ? 'left hand' : 'right hand'}`
     }
 
-    // 구조화된 프롬프트 생성
-    const prompt = `A single ${gender} character, full body shot, ${angle}, ${pose}${direction ? ', ' + direction : ''}.
+    // 해상도 및 종횡비 정보 가져오기
+    const resInfo = RESOLUTION_OPTIONS.find(r => r.id === resolution) || RESOLUTION_OPTIONS[1]
+    const arInfo = ASPECT_RATIO_OPTIONS.find(a => a.id === aspectRatio) || ASPECT_RATIO_OPTIONS[0]
+
+    // 구조화된 프롬프트 생성 - 단일 전신 캐릭터 강조
+    const prompt = `ONE single ${gender} character illustration.
+
+CRITICAL REQUIREMENTS:
+- EXACTLY ONE character only (not 2, not 3, just 1)
+- FULL BODY from head to feet (not just face or bust)
+- Standing pose, ${angle}
+- Centered in frame with space around the character
 
 Character details:
 - Age: ${character.base.age}
 - Body: ${character.base.bodyType} build, ${character.base.height}
-- Face: ${character.face.style} face with ${character.face.eyes}, ${character.face.skinTone} skin tone
-- Hair: ${character.hair.color} ${character.hair.style} hair
-- Outfit: ${outfit.length > 0 ? outfit.join(', ') : 'casual clothes'}${accessories.length > 0 ? ', with ' + accessories.join(', ') : ''}${weaponDesc ? ', ' + weaponDesc : ''}
+- Face: ${character.face.style} features with ${character.face.eyes}, ${character.face.skinTone} skin
+- Hair: ${character.hair.color} ${character.hair.style}
+- Outfit: ${outfit.length > 0 ? outfit.join(', ') : 'casual clothes'}${accessories.length > 0 ? ', ' + accessories.join(', ') : ''}${weaponDesc ? ', ' + weaponDesc : ''}
 
-Style: Korean webtoon style, clean bold outlines, cel-shaded coloring, consistent character design.
-Background: Pure solid white background (#FFFFFF), no shadows, no floor, character isolated on white.
-Composition: Single character only, centered, no multiple views, no turnaround sheet.`
+Style: Korean webtoon style, clean bold outlines, cel-shaded coloring.
+Background: Pure solid white #FFFFFF, no shadows, no floor, no environment.
+Image: ${resInfo.name}, ${arInfo.id} aspect ratio.
+
+DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, face only, bust only.`
 
     return prompt
-  }, [character])
+  }, [character, resolution, aspectRatio])
 
   // ==================== 카테고리별 업데이트 함수 ====================
 
@@ -492,6 +494,37 @@ Composition: Single character only, centered, no multiple views, no turnaround s
               {generateTransparent
                 ? '흰배경 → 검정배경 변환 → 알파 추출 (API 2회 호출)'
                 : '흰배경 이미지만 생성 (API 1회 호출)'}
+            </p>
+          </div>
+          <div className="setting-group">
+            <label>📐 해상도</label>
+            <div className="option-buttons">
+              {RESOLUTION_OPTIONS.map((res) => (
+                <button
+                  key={res.id}
+                  className={resolution === res.id ? 'active' : ''}
+                  onClick={() => setResolution(res.id)}
+                >
+                  {res.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="setting-group">
+            <label>📏 종횡비</label>
+            <div className="option-buttons">
+              {ASPECT_RATIO_OPTIONS.map((ar) => (
+                <button
+                  key={ar.id}
+                  className={aspectRatio === ar.id ? 'active' : ''}
+                  onClick={() => setAspectRatio(ar.id)}
+                >
+                  {ar.name}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              💡 큰 무기를 든 캐릭터는 16:9 추천
             </p>
           </div>
           <div className="setting-group">
@@ -900,46 +933,14 @@ Composition: Single character only, centered, no multiple views, no turnaround s
         )
 
       case 'pose':
-        const poseItems = (opts.poses as Record<string, string[]>)[character.pose.category] || []
         return (
           <div className="char-settings-panel">
             <h4>🏃 포즈 설정</h4>
+            <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+              기본 스탠딩 포즈로 고정, 각도만 선택 가능
+            </p>
             <div className="setting-group">
-              <label>카테고리</label>
-              <div className="option-buttons">
-                {(opts.category as string[]).map((opt) => (
-                  <button
-                    key={opt}
-                    className={character.pose.category === opt ? 'active' : ''}
-                    onClick={() => {
-                      updateCharacter('pose', 'category', opt)
-                      const poses = (OPTIONS_DATA.pose.poses as Record<string, string[]>)[opt]
-                      if (poses && poses.length > 0) {
-                        updateCharacter('pose', 'pose', poses[0])
-                      }
-                    }}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="setting-group">
-              <label>포즈</label>
-              <div className="option-buttons">
-                {poseItems.map((opt) => (
-                  <button
-                    key={opt}
-                    className={character.pose.pose === opt ? 'active' : ''}
-                    onClick={() => updateCharacter('pose', 'pose', opt)}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="setting-group">
-              <label>각도</label>
+              <label>각도 (전신 스탠딩 포즈)</label>
               <div className="option-buttons">
                 {(opts.angle as string[]).map((opt) => (
                   <button
@@ -947,21 +948,7 @@ Composition: Single character only, centered, no multiple views, no turnaround s
                     className={character.pose.angle === opt ? 'active' : ''}
                     onClick={() => updateCharacter('pose', 'angle', opt)}
                   >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="setting-group">
-              <label>방향</label>
-              <div className="option-buttons">
-                {(opts.direction as string[]).map((opt) => (
-                  <button
-                    key={opt}
-                    className={character.pose.direction === opt ? 'active' : ''}
-                    onClick={() => updateCharacter('pose', 'direction', opt)}
-                  >
-                    {opt}
+                    {opt === '정면' ? '👤 정면' : opt === '측면' ? '👤 측면' : '👤 후면'}
                   </button>
                 ))}
               </div>
