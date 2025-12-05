@@ -3,7 +3,7 @@
  * 이미지 생성 및 편집을 위한 API 호출 함수들
  *
  * 사용법:
- * import { generateImage, editImage, extractAlpha, MODELS } from '../utils/geminiApi'
+ * import { generateImage, editImage, extractAlpha, MODELS, IMAGE_SIZES, ASPECT_RATIOS } from '../utils/geminiApi'
  */
 
 // 사용 가능한 모델 목록 (공식 문서 기준)
@@ -13,6 +13,20 @@ export const MODELS = [
   { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 2.5 Flash' },
   { id: 'gemini-3-pro-image-preview', name: '나노바나나 3 Pro' },
 ]
+
+// 이미지 해상도 옵션 (공식 문서: 대문자 K 필수)
+export const IMAGE_SIZES = ['1K', '2K', '4K'] as const
+export type ImageSize = typeof IMAGE_SIZES[number]
+
+// 종횡비 옵션 (공식 문서 기준)
+export const ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const
+export type AspectRatio = typeof ASPECT_RATIOS[number]
+
+// 이미지 생성 옵션 타입
+export interface ImageOptions {
+  aspectRatio?: AspectRatio
+  imageSize?: ImageSize
+}
 
 // API 응답에서 이미지 base64 추출
 const extractImageFromResponse = (result: any): string | null => {
@@ -27,20 +41,41 @@ const extractImageFromResponse = (result: any): string | null => {
 
 /**
  * 텍스트 프롬프트로 이미지 생성
+ * @param apiKey - Google AI API 키
+ * @param prompt - 이미지 생성 프롬프트
+ * @param model - 모델 ID (기본: 나노바나나 2.0)
+ * @param options - 이미지 옵션 (해상도, 종횡비)
  */
 export async function generateImage(
   apiKey: string,
   prompt: string,
-  model: string = MODELS[0].id
+  model: string = MODELS[0].id,
+  options?: ImageOptions
 ): Promise<{ base64: string; url: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+  // generationConfig 구성 (공식 문서 기준)
+  const generationConfig: any = {
+    responseModalities: ['TEXT', 'IMAGE'],
+  }
+
+  // imageConfig 추가 (해상도/종횡비 설정)
+  if (options?.aspectRatio || options?.imageSize) {
+    generationConfig.imageConfig = {}
+    if (options.aspectRatio) {
+      generationConfig.imageConfig.aspectRatio = options.aspectRatio
+    }
+    if (options.imageSize) {
+      generationConfig.imageConfig.imageSize = options.imageSize
+    }
+  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+      generationConfig,
     }),
   })
 

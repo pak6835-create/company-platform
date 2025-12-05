@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
-import { generateImage, editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS } from '../utils/geminiApi'
+import { generateImage, editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, IMAGE_SIZES, ASPECT_RATIOS } from '../utils/geminiApi'
+import type { ImageSize, AspectRatio } from '../utils/geminiApi'
 
 // ==================== 카테고리 및 옵션 데이터 ====================
 
@@ -81,11 +82,11 @@ const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, stri
   },
 }
 
-// 해상도 옵션
+// 해상도 옵션 (대문자 K 필수 - Gemini API 공식 문서 기준)
 const RESOLUTION_OPTIONS = [
-  { id: '1k', name: '1K (1024px)', size: 1024 },
-  { id: '2k', name: '2K (2048px)', size: 2048 },
-  { id: '4k', name: '4K (4096px)', size: 4096 },
+  { id: '1K', name: '1K (1024px)', size: 1024 },
+  { id: '2K', name: '2K (2048px)', size: 2048 },
+  { id: '4K', name: '4K (4096px)', size: 4096 },
 ]
 
 // 종횡비 옵션
@@ -137,7 +138,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
   const [generateTransparent, setGenerateTransparent] = useState(true) // 투명 배경 생성 옵션
   const [generationStatus, setGenerationStatus] = useState('')
-  const [resolution, setResolution] = useState('2k') // 해상도
+  const [resolution, setResolution] = useState('2K') // 해상도 (대문자 K)
   const [aspectRatio, setAspectRatio] = useState('16:9') // 종횡비
   const [generateAllAngles, setGenerateAllAngles] = useState(false) // 세 각도 한 장에 생성
 
@@ -284,9 +285,13 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
     setGenerationStatus('')
 
     try {
-      // 1단계: 흰배경 이미지 생성
+      // 1단계: 흰배경 이미지 생성 (해상도/종횡비 옵션 포함)
       setGenerationStatus('1/3 흰배경 이미지 생성 중...')
-      const whiteResult = await generateImage(apiKey, generatedPrompt, model)
+      const imageOptions = {
+        aspectRatio: (generateAllAngles ? '16:9' : aspectRatio) as AspectRatio,
+        imageSize: resolution as ImageSize,
+      }
+      const whiteResult = await generateImage(apiKey, generatedPrompt, model, imageOptions)
 
       // 투명 배경 생성이 꺼져있으면 여기서 끝
       if (!generateTransparent) {
