@@ -75,6 +75,14 @@ interface Asset {
   url: string
   prompt: string
   timestamp: number
+  category: string // 어셋 카테고리
+}
+
+// 어셋 카테고리 타입
+interface AssetCategory {
+  id: string
+  name: string
+  color: string
 }
 
 function WorkspaceCanvas() {
@@ -98,19 +106,30 @@ function WorkspaceCanvas() {
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [activeTool, setActiveTool] = useState<string>('select')
   const [showAssetLibrary, setShowAssetLibrary] = useState(true)
+  const [libraryWidth, setLibraryWidth] = useState(240) // 라이브러리 가로폭
   // 어셋은 메모리에만 저장 (base64 이미지가 너무 커서 localStorage 용량 초과)
   const [assets, setAssets] = useState<Asset[]>([])
+  // 어셋 카테고리 목록
+  const [categories, setCategories] = useState<AssetCategory[]>([
+    { id: 'default', name: '전체', color: '#3b82f6' },
+    { id: 'character', name: '캐릭터', color: '#8b5cf6' },
+    { id: 'background', name: '배경', color: '#10b981' },
+    { id: 'prop', name: '소품', color: '#f59e0b' },
+  ])
+  const [selectedCategory, setSelectedCategory] = useState('default')
+  const [showCategoryInput, setShowCategoryInput] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
 
   // 어셋 추가 이벤트 리스너
   useEffect(() => {
     const handleAssetAdd = (e: Event) => {
-      const { url, prompt, timestamp } = (e as CustomEvent).detail
+      const { url, prompt, timestamp, category } = (e as CustomEvent).detail
       setAssets(prev => [
-        { id: `asset-${timestamp}`, url, prompt, timestamp },
+        { id: `asset-${timestamp}`, url, prompt, timestamp, category: category || 'default' },
         ...prev
-      ].slice(0, 10)) // 최대 10개로 제한 (메모리 절약)
+      ].slice(0, 50)) // 최대 50개로 제한
     }
     window.addEventListener('asset-add', handleAssetAdd)
     return () => window.removeEventListener('asset-add', handleAssetAdd)
@@ -719,16 +738,105 @@ function WorkspaceCanvas() {
         </ReactFlow>
       </div>
 
-      {/* 오른쪽 어셋 라이브러리 사이드바 */}
-      <div className={`asset-sidebar ${showAssetLibrary ? 'open' : ''}`}>
+      {/* 오른쪽 라이브러리 사이드바 */}
+      <div
+        className={`asset-sidebar ${showAssetLibrary ? 'open' : ''}`}
+        style={showAssetLibrary ? { width: libraryWidth } : undefined}
+      >
+        {/* 리사이즈 핸들 */}
+        {showAssetLibrary && (
+          <div
+            className="library-resize-handle"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              const startX = e.clientX
+              const startWidth = libraryWidth
+              const handleMouseMove = (moveEvent: MouseEvent) => {
+                const newWidth = Math.max(180, Math.min(500, startWidth - (moveEvent.clientX - startX)))
+                setLibraryWidth(newWidth)
+              }
+              const handleMouseUp = () => {
+                document.removeEventListener('mousemove', handleMouseMove)
+                document.removeEventListener('mouseup', handleMouseUp)
+              }
+              document.addEventListener('mousemove', handleMouseMove)
+              document.addEventListener('mouseup', handleMouseUp)
+            }}
+          />
+        )}
         <div className="asset-sidebar-header">
-          <h3>🖼️ 어셋 ({assets.length})</h3>
+          <h3>📚 라이브러리 ({assets.length})</h3>
           <button onClick={() => setShowAssetLibrary(!showAssetLibrary)}>
             {showAssetLibrary ? '→' : '←'}
           </button>
         </div>
         {showAssetLibrary && (
           <div className="asset-sidebar-content">
+            {/* 카테고리 탭 */}
+            <div className="library-category-tabs">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  className={`library-category-tab ${selectedCategory === cat.id ? 'active' : ''}`}
+                  style={{ '--cat-color': cat.color } as React.CSSProperties}
+                  onClick={() => setSelectedCategory(cat.id)}
+                >
+                  {cat.name}
+                </button>
+              ))}
+              <button
+                className="library-category-add"
+                onClick={() => setShowCategoryInput(true)}
+                title="새 카테고리 추가"
+              >
+                +
+              </button>
+            </div>
+
+            {/* 새 카테고리 입력 */}
+            {showCategoryInput && (
+              <div className="library-category-input">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="카테고리 이름"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newCategoryName.trim()) {
+                      const colors = ['#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
+                      setCategories(prev => [...prev, {
+                        id: `cat-${Date.now()}`,
+                        name: newCategoryName.trim(),
+                        color: colors[prev.length % colors.length]
+                      }])
+                      setNewCategoryName('')
+                      setShowCategoryInput(false)
+                    } else if (e.key === 'Escape') {
+                      setNewCategoryName('')
+                      setShowCategoryInput(false)
+                    }
+                  }}
+                />
+                <button onClick={() => {
+                  if (newCategoryName.trim()) {
+                    const colors = ['#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
+                    setCategories(prev => [...prev, {
+                      id: `cat-${Date.now()}`,
+                      name: newCategoryName.trim(),
+                      color: colors[prev.length % colors.length]
+                    }])
+                    setNewCategoryName('')
+                    setShowCategoryInput(false)
+                  }
+                }}>✓</button>
+                <button onClick={() => {
+                  setNewCategoryName('')
+                  setShowCategoryInput(false)
+                }}>✕</button>
+              </div>
+            )}
+
             {/* 이미지 업로드 영역 */}
             <div
               className="asset-upload-zone"
@@ -751,8 +859,9 @@ function WorkspaceCanvas() {
                       id: `asset-${Date.now()}`,
                       url,
                       prompt: '업로드된 이미지',
-                      timestamp: Date.now()
-                    }, ...prev].slice(0, 20))
+                      timestamp: Date.now(),
+                      category: selectedCategory === 'default' ? 'default' : selectedCategory
+                    }, ...prev].slice(0, 50))
                   }
                   reader.readAsDataURL(file)
                 }
@@ -761,99 +870,120 @@ function WorkspaceCanvas() {
                 const input = document.createElement('input')
                 input.type = 'file'
                 input.accept = 'image/*'
+                input.multiple = true
                 input.onchange = (e) => {
-                  const file = (e.target as HTMLInputElement).files?.[0]
-                  if (file) {
-                    const reader = new FileReader()
-                    reader.onload = (event) => {
-                      const url = event.target?.result as string
-                      setAssets(prev => [{
-                        id: `asset-${Date.now()}`,
-                        url,
-                        prompt: '업로드된 이미지',
-                        timestamp: Date.now()
-                      }, ...prev].slice(0, 20))
-                    }
-                    reader.readAsDataURL(file)
+                  const files = (e.target as HTMLInputElement).files
+                  if (files) {
+                    Array.from(files).forEach((file, idx) => {
+                      const reader = new FileReader()
+                      reader.onload = (event) => {
+                        const url = event.target?.result as string
+                        setAssets(prev => [{
+                          id: `asset-${Date.now()}-${idx}`,
+                          url,
+                          prompt: '업로드된 이미지',
+                          timestamp: Date.now(),
+                          category: selectedCategory === 'default' ? 'default' : selectedCategory
+                        }, ...prev].slice(0, 50))
+                      }
+                      reader.readAsDataURL(file)
+                    })
                   }
                 }
                 input.click()
               }}
             >
               <span>📁 이미지 업로드</span>
-              <span className="upload-hint">클릭 또는 드래그</span>
+              <span className="upload-hint">클릭 또는 드래그 (다중 선택 가능)</span>
             </div>
 
-            {assets.length === 0 ? (
-              <div className="asset-sidebar-empty">
-                <p>생성된 이미지가<br/>여기에 저장됩니다</p>
-              </div>
-            ) : (
-              <div className="asset-sidebar-list">
-                {assets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    className="asset-sidebar-item"
-                    title={asset.prompt}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/json', JSON.stringify({
-                        type: 'asset',
-                        url: asset.url,
-                        prompt: asset.prompt
-                      }))
-                      e.dataTransfer.effectAllowed = 'copy'
-                    }}
-                  >
-                    <img src={asset.url} alt="asset" draggable={false} />
-                    <div className="asset-sidebar-actions">
-                      <button
-                        onClick={() => {
-                          const position = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 }
-                          const newNode: Node = {
-                            id: getNewNodeId(),
-                            type: 'image',
-                            position,
-                            data: { imageUrl: asset.url, label: asset.prompt?.slice(0, 20) || 'AI 생성', prompt: asset.prompt },
-                            style: { width: 200, height: 200 },
-                          }
-                          setNodes(nds => [...nds, newNode])
-                        }}
-                        title="캔버스에 추가"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(asset.prompt || '')
-                          alert('프롬프트가 복사되었습니다!')
-                        }}
-                        title="프롬프트 복사"
-                      >
-                        📋
-                      </button>
-                      <button
-                        onClick={() => {
-                          const link = document.createElement('a')
-                          link.href = asset.url
-                          link.download = `asset-${asset.timestamp}.png`
-                          link.click()
-                        }}
-                        title="다운로드"
-                      >
-                        ⬇
-                      </button>
-                      <button
-                        onClick={() => setAssets(prev => prev.filter(a => a.id !== asset.id))}
-                        title="삭제"
-                      >
-                        ×
-                      </button>
+            {/* 필터링된 어셋 목록 */}
+            {(() => {
+              const filteredAssets = selectedCategory === 'default'
+                ? assets
+                : assets.filter(a => a.category === selectedCategory)
+              return filteredAssets.length === 0 ? (
+                <div className="asset-sidebar-empty">
+                  <p>
+                    {selectedCategory === 'default'
+                      ? '생성된 이미지가\n여기에 저장됩니다'
+                      : `'${categories.find(c => c.id === selectedCategory)?.name}' 카테고리가\n비어있습니다`}
+                  </p>
+                </div>
+              ) : (
+                <div className="asset-sidebar-list">
+                  {filteredAssets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="asset-sidebar-item"
+                      title={asset.prompt}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/json', JSON.stringify({
+                          type: 'asset',
+                          url: asset.url,
+                          prompt: asset.prompt
+                        }))
+                        e.dataTransfer.effectAllowed = 'copy'
+                      }}
+                    >
+                      <img src={asset.url} alt="asset" draggable={false} />
+                      <div className="asset-sidebar-actions">
+                        <button
+                          onClick={() => {
+                            const position = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 }
+                            const newNode: Node = {
+                              id: getNewNodeId(),
+                              type: 'image',
+                              position,
+                              data: { imageUrl: asset.url, label: asset.prompt?.slice(0, 20) || 'AI 생성', prompt: asset.prompt },
+                              style: { width: 200, height: 200 },
+                            }
+                            setNodes(nds => [...nds, newNode])
+                          }}
+                          title="캔버스에 추가"
+                        >
+                          +
+                        </button>
+                        {/* 카테고리 변경 드롭다운 */}
+                        <select
+                          value={asset.category}
+                          onChange={(e) => {
+                            setAssets(prev => prev.map(a =>
+                              a.id === asset.id ? { ...a, category: e.target.value } : a
+                            ))
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          title="카테고리 변경"
+                          className="asset-category-select"
+                        >
+                          {categories.filter(c => c.id !== 'default').map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            const link = document.createElement('a')
+                            link.href = asset.url
+                            link.download = `asset-${asset.timestamp}.png`
+                            link.click()
+                          }}
+                          title="다운로드"
+                        >
+                          ⬇
+                        </button>
+                        <button
+                          onClick={() => setAssets(prev => prev.filter(a => a.id !== asset.id))}
+                          title="삭제"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )
+            })()}
             {assets.length > 0 && (
               <button
                 className="asset-clear-all"

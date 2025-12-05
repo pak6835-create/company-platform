@@ -4056,7 +4056,7 @@
   text-decoration: underline;
 }
 
-/* ==================== 오른쪽 어셋 사이드바 ==================== */
+/* ==================== 오른쪽 라이브러리 사이드바 ==================== */
 .asset-sidebar {
   position: absolute;
   top: 48px;
@@ -4068,11 +4068,29 @@
   display: flex;
   flex-direction: column;
   z-index: 100;
-  transition: width 0.3s ease;
+  transition: width 0.2s ease;
 }
 
 .asset-sidebar.open {
-  width: 200px;
+  width: 240px; /* 기본값, JS에서 동적으로 변경됨 */
+}
+
+/* 라이브러리 리사이즈 핸들 */
+.library-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.library-resize-handle:hover,
+.library-resize-handle:active {
+  background: rgba(59, 130, 246, 0.5);
 }
 
 .asset-sidebar-header {
@@ -4130,6 +4148,121 @@
 .asset-sidebar-content::-webkit-scrollbar-thumb {
   background: #3f3f46;
   border-radius: 2px;
+}
+
+/* 라이브러리 카테고리 탭 */
+.library-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3f3f46;
+  margin-bottom: 8px;
+}
+
+.library-category-tab {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 12px;
+  background: #27272a;
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.library-category-tab:hover {
+  background: #3f3f46;
+  color: #fff;
+}
+
+.library-category-tab.active {
+  background: var(--cat-color, #3b82f6);
+  color: #fff;
+}
+
+.library-category-add {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  border: 1px dashed #4b5563;
+  border-radius: 12px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.library-category-add:hover {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+/* 새 카테고리 입력 */
+.library-category-input {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.library-category-input input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  background: #1f2937;
+  color: #fff;
+  outline: none;
+}
+
+.library-category-input input:focus {
+  border-color: #8b5cf6;
+}
+
+.library-category-input button {
+  padding: 6px 10px;
+  font-size: 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.library-category-input button:first-of-type {
+  background: #10b981;
+  color: #fff;
+}
+
+.library-category-input button:first-of-type:hover {
+  background: #059669;
+}
+
+.library-category-input button:last-of-type {
+  background: #4b5563;
+  color: #fff;
+}
+
+.library-category-input button:last-of-type:hover {
+  background: #6b7280;
+}
+
+/* 카테고리 선택 드롭다운 */
+.asset-category-select {
+  flex: 1;
+  padding: 4px;
+  font-size: 10px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.9);
+  color: #fff;
+  cursor: pointer;
+  max-width: 60px;
+}
+
+.asset-category-select:hover {
+  background: #8b5cf6;
 }
 
 .asset-sidebar-empty {
