@@ -399,6 +399,15 @@ function WorkspaceCanvas() {
             style: { width: 320, height: 550 },
           }
           break
+        case 'transparentBg':
+          newNode = {
+            id: getNewNodeId(),
+            type: 'transparentBg',
+            position,
+            data: { prompt: 'a cute cartoon cat sitting, simple design' },
+            style: { width: 380, height: 600 },
+          }
+          break
         default:
           return
       }
@@ -564,6 +573,17 @@ function WorkspaceCanvas() {
                 >
                   <span className="drag-icon">✨</span>
                   <span>후처리</span>
+                </div>
+                <div
+                  className="draggable-item transparent-bg-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'transparentBg')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🎭</span>
+                  <span>투명 배경 생성기</span>
                 </div>
               </div>
             </div>
