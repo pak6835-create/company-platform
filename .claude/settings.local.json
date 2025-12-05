@@ -31,7 +31,8 @@
       "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix image paths and add hero text animations\n\nImage path fixes:\n- Use BASE_URL for GitHub Pages compatibility\n- Fix hero background, partner logos, portfolio images\n- Fix logo path in SiteContext\n\nText motion animations:\n- Add AnimatedText component with per-character reveal\n- Add FadeUpText component with fade-in effect\n- Add hero title animation with 3D rotation\n- Add button hover ripple effect\n- Include responsive styles for animations\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nAdd Nanobanana 3 Pro model for AI image generation\n\n- Add gemini-3-pro-image-preview (나노바나나 3 Pro)\n- Fix model IDs to correct format:\n  - gemini-2.0-flash-preview-image-generation (나노바나나 2)\n  - gemini-2.5-flash-preview-image-generation (나노바나나 2.5)\n  - gemini-3-pro-image-preview (나노바나나 3 Pro)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" push origin cranky-wright)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

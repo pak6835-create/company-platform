@@ -10,6 +10,7 @@
 export const MODELS = [
   { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2.0 (안정)' },
   { id: 'gemini-2.0-flash-exp-image-generation', name: '나노바나나 2.0 Exp' },
+  { id: 'imagen-3.0-generate-002', name: '나노바나나 3 Pro' },
 ]
 
 // API 응답에서 이미지 base64 추출
