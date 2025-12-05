@@ -395,8 +395,8 @@ function WorkspaceCanvas() {
             id: getNewNodeId(),
             type: 'postProcess',
             position,
-            data: { processType: 'removeBackground', intensity: 1.0, selectedOptions: [] },
-            style: { width: 280, height: 300 },
+            data: { processType: 'removeBackground', intensity: 0.8 },
+            style: { width: 300, height: 450 },
           }
           break
         default:
