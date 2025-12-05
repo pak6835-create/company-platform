@@ -2407,10 +2407,11 @@
   border-radius: 2px;
 }
 
-/* 후처리 노드 스크롤 */
+/* 후처리 노드 - 노드 크기에 맞게 확장 */
 .pp-scrollable {
-  max-height: 220px;
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .pp-scrollable::-webkit-scrollbar {
