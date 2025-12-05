@@ -9,6 +9,7 @@ export { BoardNode } from './BoardNode'
 export { AIGeneratorNode } from './AIGeneratorNode'
 export { ReferenceNode } from './ReferenceNode'
 export { TransparentBgNode } from './TransparentBgNode'
+export { PoseChangeNode } from './PoseChangeNode'
 
 // 노드 타입 맵
 import { ImageNode } from './ImageNode'
@@ -19,6 +20,7 @@ import { BoardNode } from './BoardNode'
 import { AIGeneratorNode } from './AIGeneratorNode'
 import { ReferenceNode } from './ReferenceNode'
 import { TransparentBgNode } from './TransparentBgNode'
+import { PoseChangeNode } from './PoseChangeNode'
 
 export const nodeTypes = {
   image: ImageNode,
@@ -29,4 +31,5 @@ export const nodeTypes = {
   aiGenerator: AIGeneratorNode,
   reference: ReferenceNode,
   transparentBg: TransparentBgNode,
+  poseChange: PoseChangeNode,
 }

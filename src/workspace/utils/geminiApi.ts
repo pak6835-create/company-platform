@@ -102,23 +102,38 @@ export async function generateImage(
 
 /**
  * 기존 이미지를 편집 (배경 변경 등)
+ * @param apiKey - Google AI API 키
+ * @param imageBase64 - 편집할 이미지의 base64 데이터
+ * @param editPrompt - 편집 프롬프트
+ * @param model - 모델 ID
+ * @param mimeType - 이미지 MIME 타입
+ * @param referenceBase64 - 참조 이미지의 base64 데이터 (선택, 포즈 변경 등에 사용)
  */
 export async function editImage(
   apiKey: string,
   imageBase64: string,
   editPrompt: string,
   model: string = MODELS[0].id,
-  mimeType: string = 'image/png'
+  mimeType: string = 'image/png',
+  referenceBase64?: string
 ): Promise<{ base64: string; url: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
+  // 요청 parts 구성
+  const parts: any[] = [
+    { inlineData: { mimeType, data: imageBase64 } },
+  ]
+
+  // 참조 이미지가 있으면 추가
+  if (referenceBase64) {
+    parts.push({ inlineData: { mimeType, data: referenceBase64 } })
+  }
+
+  // 프롬프트 추가
+  parts.push({ text: editPrompt })
+
   const requestBody = {
-    contents: [{
-      parts: [
-        { inlineData: { mimeType, data: imageBase64 } },
-        { text: editPrompt }
-      ]
-    }],
+    contents: [{ parts }],
     generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
   }
 
@@ -128,6 +143,8 @@ export async function editImage(
     mimeType,
     promptLength: editPrompt.length,
     imageDataLength: imageBase64.length,
+    hasReference: !!referenceBase64,
+    referenceLength: referenceBase64?.length || 0,
   })
 
   const response = await fetch(endpoint, {

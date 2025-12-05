@@ -441,6 +441,15 @@ function WorkspaceCanvas() {
             style: { width: 380, height: 600 },
           }
           break
+        case 'poseChange':
+          newNode = {
+            id: getNewNodeId(),
+            type: 'poseChange',
+            position,
+            data: {},
+            style: { width: 420, height: 550 },
+          }
+          break
         default:
           return
       }
@@ -606,6 +615,17 @@ function WorkspaceCanvas() {
                 >
                   <span className="drag-icon">🎭</span>
                   <span>투명 배경 생성기</span>
+                </div>
+                <div
+                  className="draggable-item pose-change-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'poseChange')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🕺</span>
+                  <span>포즈 변경</span>
                 </div>
               </div>
             </div>
