@@ -1872,6 +1872,9 @@
   color: white;
   font-weight: 600;
   font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .pp-node-content {
@@ -3761,13 +3764,14 @@
   overflow: hidden;
 }
 
-/* 왼쪽 카테고리 버튼 영역 */
+/* 왼쪽 카테고리 버튼 영역 - 2열 그리드 */
 .aig-main-layout .aig-categories {
-  width: 90px;
+  width: 160px;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
+  align-content: start;
   overflow-y: auto;
 }
 
