@@ -38,8 +38,18 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
 
     // 이 노드를 타겟으로 하는 모든 엣지의 소스 노드 찾기
     const incomingEdges = edges.filter((e) => e && e.target === id)
+
+    // 디버그: 엣지와 노드 ID 상세 비교
+    console.log('[AI Generator] 내 ID:', id)
+    console.log('[AI Generator] 모든 노드 ID:', nodes.map(n => n.id))
+    console.log('[AI Generator] 엣지 소스 ID:', incomingEdges.map(e => e.source))
+
     const sources = incomingEdges
-      .map((e) => nodes.find((n) => n && n.id === e.source))
+      .map((e) => {
+        const found = nodes.find((n) => n && n.id === e.source)
+        console.log('[AI Generator] 소스 찾기:', e.source, '→', found ? found.type : 'NOT FOUND')
+        return found
+      })
       .filter(Boolean)
 
     // 디버그: 연결 상태 로깅
