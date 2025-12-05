@@ -139,8 +139,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [generateTransparent, setGenerateTransparent] = useState(true) // 투명 배경 생성 옵션
   const [generationStatus, setGenerationStatus] = useState('')
   const [resolution, setResolution] = useState('2K') // 해상도 (대문자 K)
-  const [aspectRatio, setAspectRatio] = useState('16:9') // 종횡비
-  const [generateAllAngles, setGenerateAllAngles] = useState(false) // 세 각도 한 장에 생성
+  const [aspectRatio, setAspectRatio] = useState('1:1') // 종횡비 (캐릭터는 정사각형 추천)
 
   // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
   useEffect(() => {
@@ -172,90 +171,31 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     )
   }, [apiKey, model, generatedImages, id, setNodes])
 
-  // ==================== 프롬프트 자동 생성 ====================
+  // ==================== 프롬프트 자동 생성 (간소화) ====================
 
   const generatedPrompt = useMemo(() => {
-    // 앵글 매핑 (한국어 → 영어)
-    const angleMap: { [key: string]: string } = {
-      '정면': 'front view',
-      '측면': 'side view (profile)',
-      '후면': 'back view',
-    }
-
     const gender = character.base.gender === '남성' ? 'male' : 'female'
-    const angle = angleMap[character.pose.angle] || 'front view'
+    const angle = character.pose.angle === '정면' ? 'front view' : character.pose.angle === '측면' ? 'side view' : 'back view'
 
-    // 의상 조합
-    const outfit = []
-    if (character.top.item) outfit.push(character.top.item)
-    if (character.bottom.item) outfit.push(character.bottom.item)
-    if (character.shoes.item) outfit.push(character.shoes.item)
+    // 의상
+    const outfit = [character.top.item, character.bottom.item, character.shoes.item].filter(Boolean).join(', ')
 
     // 악세서리
-    const accessories = []
-    if (character.accessory.head !== '없음') accessories.push(character.accessory.head)
-    if (character.accessory.neck !== '없음') accessories.push(character.accessory.neck)
-    if (character.accessory.hands !== '없음') accessories.push(character.accessory.hands)
-    if (character.accessory.other !== '없음') accessories.push(character.accessory.other)
+    const acc = [character.accessory.head, character.accessory.neck, character.accessory.hands, character.accessory.other]
+      .filter(a => a && a !== '없음').join(', ')
 
     // 무기
-    let weaponDesc = ''
-    if (character.weapon.category !== '없음' && character.weapon.item) {
-      weaponDesc = `holding ${character.weapon.item} in ${character.weapon.position === '양손' ? 'both hands' : character.weapon.position === '등에' ? 'back' : character.weapon.position === '허리에' ? 'waist' : character.weapon.position === '왼손' ? 'left hand' : 'right hand'}`
-    }
+    const weapon = character.weapon.category !== '없음' && character.weapon.item
+      ? `holding ${character.weapon.item}`
+      : ''
 
-    // 해상도 정보
-    const resInfo = RESOLUTION_OPTIONS.find(r => r.id === resolution) || RESOLUTION_OPTIONS[1]
-
-    // 캐릭터 상세 정보 (공통)
-    const characterDetails = `Character details:
-- Age: ${character.base.age}
-- Body: ${character.base.bodyType} build, ${character.base.height}
-- Face: ${character.face.style} features with ${character.face.eyes}, ${character.face.skinTone} skin
-- Hair: ${character.hair.color} ${character.hair.style}
-- Outfit: ${outfit.length > 0 ? outfit.join(', ') : 'casual clothes'}${accessories.length > 0 ? ', ' + accessories.join(', ') : ''}${weaponDesc ? ', ' + weaponDesc : ''}`
-
-    // 세 각도 한 장 모드
-    if (generateAllAngles) {
-      return `Character turnaround sheet with THREE views of the SAME character side by side:
-LEFT: Front view (facing camera)
-CENTER: Side view (profile, facing right)
-RIGHT: Back view (facing away)
-
-CRITICAL REQUIREMENTS:
-- All three views must be the EXACT SAME character with identical design
-- Each view shows FULL BODY from head to feet
-- Standing pose in all views
-- Equal spacing between views
-- 16:9 wide aspect ratio to fit all three views
-
-${characterDetails}
-
-Style: Korean webtoon style, clean bold outlines, cel-shaded coloring.
-Background: Pure solid white #FFFFFF, no shadows, no floor.
-Image: ${resInfo.name}, 16:9 aspect ratio (wide).
-
-IMPORTANT: Same character, same outfit, same design in all three views.`
-    }
-
-    // 단일 각도 모드
-    const arInfo = ASPECT_RATIO_OPTIONS.find(a => a.id === aspectRatio) || ASPECT_RATIO_OPTIONS[0]
-    return `ONE single ${gender} character illustration.
-
-CRITICAL REQUIREMENTS:
-- EXACTLY ONE character only (not 2, not 3, just 1)
-- FULL BODY from head to feet (not just face or bust)
-- Standing pose, ${angle}
-- Centered in frame with space around the character
-
-${characterDetails}
-
-Style: Korean webtoon style, clean bold outlines, cel-shaded coloring.
-Background: Pure solid white #FFFFFF, no shadows, no floor, no environment.
-Image: ${resInfo.name}, ${arInfo.id} aspect ratio.
-
-DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, face only, bust only.`
-  }, [character, resolution, aspectRatio, generateAllAngles])
+    // 간단한 프롬프트 (해상도/종횡비는 API 옵션으로 전달)
+    return `Single ${gender} character, full body, standing, ${angle}, white background.
+${character.base.age}, ${character.base.bodyType} build, ${character.base.height}.
+${character.hair.color} ${character.hair.style} hair, ${character.face.style} face.
+Wearing ${outfit || 'casual clothes'}${acc ? ', ' + acc : ''}${weapon ? ', ' + weapon : ''}.
+Korean webtoon style, clean lines, cel-shaded.`
+  }, [character])
 
   // ==================== 카테고리별 업데이트 함수 ====================
 
@@ -288,7 +228,7 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
       // 1단계: 흰배경 이미지 생성 (해상도/종횡비 옵션 포함)
       setGenerationStatus('1/3 흰배경 이미지 생성 중...')
       const imageOptions = {
-        aspectRatio: (generateAllAngles ? '16:9' : aspectRatio) as AspectRatio,
+        aspectRatio: aspectRatio as AspectRatio,
         imageSize: resolution as ImageSize,
       }
       const whiteResult = await generateImage(apiKey, generatedPrompt, model, imageOptions)
@@ -410,29 +350,11 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
                   key={ar.id}
                   className={aspectRatio === ar.id ? 'active' : ''}
                   onClick={() => setAspectRatio(ar.id)}
-                  disabled={generateAllAngles}
                 >
                   {ar.name}
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              {generateAllAngles ? '⚠️ 세 각도 모드에서는 16:9 자동 적용' : '💡 큰 무기를 든 캐릭터는 16:9 추천'}
-            </p>
-          </div>
-          <div className="setting-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={generateAllAngles}
-                onChange={(e) => setGenerateAllAngles(e.target.checked)}
-                style={{ width: 18, height: 18 }}
-              />
-              <span>📐 정면/측면/후면 한 장에 생성</span>
-            </label>
-            <p style={{ fontSize: 11, color: '#888', margin: '4px 0 0 26px' }}>
-              세 각도를 한 장의 가로 이미지로 생성 (16:9 자동)
-            </p>
           </div>
           <div className="setting-group">
             <label>캐릭터 초기화</label>

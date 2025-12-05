@@ -8,7 +8,6 @@ export { BoardNode } from './BoardNode'
 // AI 관련 노드
 export { AIGeneratorNode } from './AIGeneratorNode'
 export { ReferenceNode } from './ReferenceNode'
-export { PostProcessNode } from './PostProcessNode'
 export { TransparentBgNode } from './TransparentBgNode'
 
 // 노드 타입 맵
@@ -19,7 +18,6 @@ import { ShapeNode } from './ShapeNode'
 import { BoardNode } from './BoardNode'
 import { AIGeneratorNode } from './AIGeneratorNode'
 import { ReferenceNode } from './ReferenceNode'
-import { PostProcessNode } from './PostProcessNode'
 import { TransparentBgNode } from './TransparentBgNode'
 
 export const nodeTypes = {
@@ -30,6 +28,5 @@ export const nodeTypes = {
   board: BoardNode,
   aiGenerator: AIGeneratorNode,
   reference: ReferenceNode,
-  postProcess: PostProcessNode,
   transparentBg: TransparentBgNode,
 }

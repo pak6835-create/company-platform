@@ -390,15 +390,6 @@ function WorkspaceCanvas() {
             style: { width: 280, height: 400 },
           }
           break
-        case 'postProcess':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'postProcess',
-            position,
-            data: { processType: 'removeBackground', intensity: 0.8 },
-            style: { width: 320, height: 550 },
-          }
-          break
         case 'transparentBg':
           newNode = {
             id: getNewNodeId(),
@@ -561,19 +552,8 @@ function WorkspaceCanvas() {
 
             {/* 후처리 */}
             <div className="add-section">
-              <h4>후처리</h4>
+              <h4>도구</h4>
               <div className="draggable-items">
-                <div
-                  className="draggable-item postprocess-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'postProcess')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">✨</span>
-                  <span>후처리</span>
-                </div>
                 <div
                   className="draggable-item transparent-bg-drag"
                   draggable
