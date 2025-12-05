@@ -108,6 +108,7 @@ export async function generateImage(
  * @param model - 모델 ID
  * @param mimeType - 이미지 MIME 타입
  * @param referenceBase64 - 참조 이미지의 base64 데이터 (선택, 포즈 변경 등에 사용)
+ * @param options - 이미지 옵션 (해상도, 종횡비)
  */
 export async function editImage(
   apiKey: string,
@@ -115,7 +116,8 @@ export async function editImage(
   editPrompt: string,
   model: string = MODELS[0].id,
   mimeType: string = 'image/png',
-  referenceBase64?: string
+  referenceBase64?: string,
+  options?: ImageOptions
 ): Promise<{ base64: string; url: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
@@ -132,9 +134,25 @@ export async function editImage(
   // 프롬프트 추가
   parts.push({ text: editPrompt })
 
+  // generationConfig 구성
+  const generationConfig: any = {
+    responseModalities: ['TEXT', 'IMAGE'],
+  }
+
+  // imageConfig 추가 (해상도/종횡비 설정)
+  if (options?.aspectRatio || options?.imageSize) {
+    generationConfig.imageConfig = {}
+    if (options.aspectRatio) {
+      generationConfig.imageConfig.aspectRatio = options.aspectRatio
+    }
+    if (options.imageSize) {
+      generationConfig.imageConfig.imageSize = options.imageSize
+    }
+  }
+
   const requestBody = {
     contents: [{ parts }],
-    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+    generationConfig,
   }
 
   // 디버그 로그 (이미지 데이터는 생략)

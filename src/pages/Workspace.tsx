@@ -437,8 +437,8 @@ function WorkspaceCanvas() {
             id: getNewNodeId(),
             type: 'transparentBg',
             position,
-            data: { prompt: 'a cute cartoon cat sitting, simple design' },
-            style: { width: 380, height: 600 },
+            data: {},
+            style: { width: 400, height: 580 },
           }
           break
         case 'poseChange':
@@ -447,7 +447,7 @@ function WorkspaceCanvas() {
             type: 'poseChange',
             position,
             data: {},
-            style: { width: 420, height: 550 },
+            style: { width: 440, height: 650 },
           }
           break
         default:

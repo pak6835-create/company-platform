@@ -54,9 +54,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
 
   // 옵션 상태
   const [generateTransparent, setGenerateTransparent] = useState(true)
-  const [resolution, setResolution] = useState('2K')
-  const [aspectRatio, setAspectRatio] = useState('1:1')
-  const [showOptions, setShowOptions] = useState(false)
+  const [resolution, setResolution] = useState<ImageSize>('2K')
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
 
   // API 키 저장
   useEffect(() => {
@@ -157,20 +156,20 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
       setProgress(10)
       setStatusText('🔄 캐릭터와 포즈 분석 중...')
 
-      // 배경 색상 결정
-      const bgColor = generateTransparent ? 'pure white #FFFFFF' : 'appropriate'
+      // 배경 지시
       const bgInstruction = generateTransparent
         ? 'Use a pure solid white background (#FFFFFF).'
         : ''
 
-      // 포즈 변경 요청
+      // 포즈 변경 요청 (옵션 전달)
       const result = await editImage(
         apiKey,
         characterBase64,
-        `Look at the second reference image showing a pose. Redraw the character from the first image in that exact pose from the reference. Keep the character's appearance, clothing, and style exactly the same. Only change the pose to match the reference pose image. Maintain the same art style and quality. ${bgInstruction} Output aspect ratio: ${aspectRatio}. Output resolution: ${resolution}.`,
+        `Look at the second reference image showing a pose. Redraw the character from the first image in that exact pose from the reference. Keep the character's appearance, clothing, and style exactly the same. Only change the pose to match the reference pose image. Maintain the same art style and quality. ${bgInstruction}`,
         model,
-        undefined,
-        poseBase64
+        'image/png',
+        poseBase64,
+        { aspectRatio, imageSize: resolution }
       )
 
       let finalImage = result.url
@@ -185,7 +184,10 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
           apiKey,
           result.base64,
           'Change ONLY the background color from white to pure black #000000. Do NOT modify the character at all. Keep everything else exactly the same.',
-          model
+          model,
+          'image/png',
+          undefined,
+          { aspectRatio, imageSize: resolution }
         )
 
         setProgress(80)
@@ -228,13 +230,13 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         border: selected ? '2px solid #f59e0b' : '2px solid #333',
         width: '100%',
         height: '100%',
-        minHeight: 500,
+        minHeight: 600,
         color: 'white',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      <NodeResizer isVisible={selected} minWidth={400} minHeight={500} />
+      <NodeResizer isVisible={selected} minWidth={420} minHeight={600} />
 
       {/* 헤더 */}
       <div
@@ -244,26 +246,9 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
           borderRadius: '10px 10px 0 0',
           fontWeight: 'bold',
           fontSize: 14,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
         }}
       >
-        <span>🎭 포즈 변경</span>
-        <button
-          onClick={() => setShowOptions(!showOptions)}
-          style={{
-            background: 'rgba(255,255,255,0.2)',
-            border: 'none',
-            borderRadius: 4,
-            padding: '4px 8px',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: 12,
-          }}
-        >
-          ⚙️ 옵션
-        </button>
+        🎭 포즈 변경
       </div>
 
       {/* 스크롤 가능한 콘텐츠 영역 */}
@@ -277,95 +262,93 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* 옵션 패널 */}
-        {showOptions && (
-          <div style={{
-            background: '#2a2a3e',
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 12,
-            border: '1px solid #444',
-          }}>
-            {/* 투명 배경 옵션 */}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={generateTransparent}
-                  onChange={(e) => setGenerateTransparent(e.target.checked)}
-                  style={{ width: 16, height: 16 }}
-                />
-                <span>🎭 투명 배경으로 생성</span>
-              </label>
-              <p style={{ fontSize: 10, color: '#888', margin: '4px 0 0 24px' }}>
-                {generateTransparent ? 'API 2회 호출' : 'API 1회 호출'}
-              </p>
-            </div>
+        {/* 옵션 패널 (항상 표시) */}
+        <div style={{
+          background: '#2a2a3e',
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 12,
+          border: '1px solid #444',
+        }}>
+          {/* 투명 배경 옵션 */}
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={generateTransparent}
+                onChange={(e) => setGenerateTransparent(e.target.checked)}
+                style={{ width: 16, height: 16 }}
+              />
+              <span>🎭 투명 배경으로 생성</span>
+            </label>
+            <p style={{ fontSize: 10, color: '#888', margin: '4px 0 0 24px' }}>
+              {generateTransparent ? 'API 2회 호출' : 'API 1회 호출'}
+            </p>
+          </div>
 
-            {/* 해상도 옵션 */}
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, color: '#aaa', display: 'block', marginBottom: 6 }}>
-                📐 해상도
-              </label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {RESOLUTION_OPTIONS.map((res) => (
-                  <button
-                    key={res.id}
-                    onClick={() => setResolution(res.id)}
-                    style={{
-                      flex: 1,
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: resolution === res.id ? '#f59e0b' : '#3f3f46',
-                      color: resolution === res.id ? '#000' : '#fff',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      fontWeight: resolution === res.id ? 'bold' : 'normal',
-                    }}
-                  >
-                    {res.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 종횡비 옵션 */}
-            <div>
-              <label style={{ fontSize: 12, color: '#aaa', display: 'block', marginBottom: 6 }}>
-                📏 종횡비
-              </label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {ASPECT_RATIO_OPTIONS.map((ar) => (
-                  <button
-                    key={ar.id}
-                    onClick={() => setAspectRatio(ar.id)}
-                    style={{
-                      flex: 1,
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: aspectRatio === ar.id ? '#f59e0b' : '#3f3f46',
-                      color: aspectRatio === ar.id ? '#000' : '#fff',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      fontWeight: aspectRatio === ar.id ? 'bold' : 'normal',
-                    }}
-                  >
-                    {ar.name}
-                  </button>
-                ))}
-              </div>
+          {/* 해상도 옵션 */}
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>
+              📐 해상도
+            </label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {RESOLUTION_OPTIONS.map((res) => (
+                <button
+                  key={res.id}
+                  onClick={() => setResolution(res.id as ImageSize)}
+                  style={{
+                    flex: 1,
+                    padding: '5px 8px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: resolution === res.id ? '#f59e0b' : '#3f3f46',
+                    color: resolution === res.id ? '#000' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: resolution === res.id ? 'bold' : 'normal',
+                  }}
+                >
+                  {res.name}
+                </button>
+              ))}
             </div>
           </div>
-        )}
+
+          {/* 종횡비 옵션 */}
+          <div>
+            <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>
+              📏 종횡비
+            </label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {ASPECT_RATIO_OPTIONS.map((ar) => (
+                <button
+                  key={ar.id}
+                  onClick={() => setAspectRatio(ar.id as AspectRatio)}
+                  style={{
+                    flex: 1,
+                    padding: '5px 8px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: aspectRatio === ar.id ? '#f59e0b' : '#3f3f46',
+                    color: aspectRatio === ar.id ? '#000' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: aspectRatio === ar.id ? 'bold' : 'normal',
+                  }}
+                >
+                  {ar.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* API 키 */}
         <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 12, color: '#aaa', display: 'block', marginBottom: 4 }}>
+          <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>
             Gemini API Key
           </label>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
             <input
               type={showApiKey ? 'text' : 'password'}
               value={apiKey}
@@ -373,23 +356,24 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
               placeholder="API 키 입력"
               style={{
                 flex: 1,
-                padding: '8px 12px',
+                padding: '6px 10px',
                 borderRadius: 6,
                 border: '1px solid #444',
                 background: '#2a2a3e',
                 color: 'white',
-                fontSize: 12,
+                fontSize: 11,
               }}
             />
             <button
               onClick={() => setShowApiKey(!showApiKey)}
               style={{
-                padding: '8px 12px',
+                padding: '6px 10px',
                 borderRadius: 6,
                 border: 'none',
                 background: '#444',
                 color: 'white',
                 cursor: 'pointer',
+                fontSize: 12,
               }}
             >
               {showApiKey ? '🙈' : '👁️'}
@@ -398,10 +382,10 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         </div>
 
         {/* 2열 레이아웃: 캐릭터 | 포즈 */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
           {/* 왼쪽: 캐릭터 이미지 */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: '#f59e0b', marginBottom: 6, fontWeight: 'bold' }}>
+            <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 4, fontWeight: 'bold' }}>
               👤 캐릭터
             </div>
             <div
@@ -427,12 +411,12 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
               }}
               style={{
                 border: '2px dashed #f59e0b',
-                borderRadius: 8,
-                padding: 8,
+                borderRadius: 6,
+                padding: 6,
                 textAlign: 'center',
                 cursor: 'pointer',
                 background: connectedCharacter ? 'transparent' : '#2a2a3e',
-                minHeight: 100,
+                minHeight: 80,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -445,8 +429,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                   alt="character"
                   style={{
                     maxWidth: '100%',
-                    maxHeight: 90,
-                    borderRadius: 6,
+                    maxHeight: 70,
+                    borderRadius: 4,
                     objectFit: 'contain',
                   }}
                 />
@@ -460,7 +444,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
 
           {/* 오른쪽: 포즈 이미지 */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: '#10b981', marginBottom: 6, fontWeight: 'bold' }}>
+            <div style={{ fontSize: 11, color: '#10b981', marginBottom: 4, fontWeight: 'bold' }}>
               🕺 포즈 참조
             </div>
             <div
@@ -469,12 +453,12 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
               onDragOver={(e) => e.preventDefault()}
               style={{
                 border: '2px dashed #10b981',
-                borderRadius: 8,
-                padding: 8,
+                borderRadius: 6,
+                padding: 6,
                 textAlign: 'center',
                 cursor: 'pointer',
                 background: poseImage ? 'transparent' : '#2a2a3e',
-                minHeight: 100,
+                minHeight: 80,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -487,8 +471,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                   alt="pose"
                   style={{
                     maxWidth: '100%',
-                    maxHeight: 90,
-                    borderRadius: 6,
+                    maxHeight: 70,
+                    borderRadius: 4,
                     objectFit: 'contain',
                   }}
                 />
@@ -514,8 +498,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
           disabled={isProcessing || !apiKey || !connectedCharacter || !poseImage}
           style={{
             width: '100%',
-            padding: '12px',
-            borderRadius: 8,
+            padding: '10px',
+            borderRadius: 6,
             border: 'none',
             background: isProcessing
               ? '#555'
@@ -523,7 +507,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
             color: 'white',
             fontWeight: 'bold',
             cursor: isProcessing ? 'wait' : 'pointer',
-            marginBottom: 12,
+            marginBottom: 10,
+            fontSize: 13,
           }}
         >
           {isProcessing ? '⏳ 처리 중...' : '🎭 포즈 변경 실행'}
@@ -531,29 +516,29 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
 
         {/* 로딩 프로그레스바 */}
         {isProcessing && (
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 10 }}>
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
-              fontSize: 11,
+              fontSize: 10,
               color: '#aaa',
-              marginBottom: 6,
+              marginBottom: 4,
             }}>
               <span>{statusText}</span>
               <span>{progress}%</span>
             </div>
             <div style={{
               width: '100%',
-              height: 8,
+              height: 6,
               background: '#2a2a3e',
-              borderRadius: 4,
+              borderRadius: 3,
               overflow: 'hidden',
             }}>
               <div style={{
                 width: `${progress}%`,
                 height: '100%',
                 background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 50%, #10b981 100%)',
-                borderRadius: 4,
+                borderRadius: 3,
                 transition: 'width 0.3s ease',
               }} />
             </div>
@@ -564,11 +549,11 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         {!isProcessing && statusText && (
           <div
             style={{
-              padding: '8px 12px',
+              padding: '6px 10px',
               background: statusText.includes('✅') ? '#1a3d1a' : statusText.includes('❌') ? '#3d1a1a' : '#2a2a3e',
-              borderRadius: 6,
-              fontSize: 12,
-              marginBottom: 12,
+              borderRadius: 4,
+              fontSize: 11,
+              marginBottom: 10,
               textAlign: 'center',
             }}
           >
@@ -579,14 +564,14 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         {/* 결과 이미지 */}
         {resultImage && (
           <div style={{ overflow: 'hidden' }}>
-            <div style={{ fontSize: 12, color: '#f59e0b', marginBottom: 4, fontWeight: 'bold' }}>
+            <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 4, fontWeight: 'bold' }}>
               ✨ 결과
             </div>
             <div style={{
               background: generateTransparent
                 ? 'repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px'
                 : '#2a2a3e',
-              borderRadius: 8,
+              borderRadius: 6,
               padding: 4,
               overflow: 'hidden',
             }}>
@@ -595,9 +580,9 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 alt="Result"
                 style={{
                   width: '100%',
-                  maxHeight: 200,
+                  maxHeight: 180,
                   objectFit: 'contain',
-                  borderRadius: 6,
+                  borderRadius: 4,
                   display: 'block',
                 }}
               />
@@ -611,14 +596,15 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
               }}
               style={{
                 width: '100%',
-                marginTop: 8,
-                padding: '8px 12px',
-                borderRadius: 6,
+                marginTop: 6,
+                padding: '6px 10px',
+                borderRadius: 4,
                 border: 'none',
                 background: '#f59e0b',
                 color: '#000',
                 fontWeight: 'bold',
                 cursor: 'pointer',
+                fontSize: 11,
               }}
             >
               ⬇️ PNG 다운로드
