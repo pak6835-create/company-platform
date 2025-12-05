@@ -141,17 +141,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [resolution, setResolution] = useState('2K') // 해상도 (대문자 K)
   const [aspectRatio, setAspectRatio] = useState('1:1') // 종횡비 (캐릭터는 정사각형 추천)
 
-  // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
+  // 노드 데이터 업데이트 (API 키와 모델만 저장 - 이미지는 메모리에만)
   useEffect(() => {
-    const imageUrl = generatedImages[0]?.url || null
-    console.log('[AIGenerator] 노드 데이터 업데이트:', {
-      id,
-      hasApiKey: !!apiKey,
-      model,
-      hasImage: !!imageUrl,
-      imageCount: generatedImages.length
-    })
-
     setNodes((nds) =>
       nds.map((n) => {
         if (n.id === id) {
@@ -161,15 +152,14 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
               ...n.data,
               apiKey,
               model,
-              lastGeneratedImage: imageUrl,
-              lastPrompt: generatedImages[0]?.prompt || null,
+              // 주의: 이미지 base64는 저장하지 않음 (localStorage 용량 초과 방지)
             },
           }
         }
         return n
       })
     )
-  }, [apiKey, model, generatedImages, id, setNodes])
+  }, [apiKey, model, id, setNodes])
 
   // ==================== 프롬프트 자동 생성 ====================
 
@@ -245,13 +235,15 @@ Important: Draw exactly ONE character only, not multiple people.`
         return
       }
 
-      // 2단계: 같은 이미지를 검정배경으로 편집 (순차 처리로 캐릭터 일관성 유지)
+      // 2단계: 같은 이미지를 검정배경으로 편집
+      // 중요: 편집 시에는 안정적인 2.0 모델 사용 (3 Pro는 캐릭터 변형 심함)
       setGenerationStatus('2/3 검정배경으로 변환 중...')
+      const stableModel = MODELS[0].id // gemini-2.0-flash (안정 모델)
       const blackResult = await editImage(
         apiKey,
         whiteResult.base64,
-        'Change the white background to solid pure black #000000. Keep everything else exactly the same. Do not modify the character at all, only change the background color.',
-        model
+        'Change ONLY the background color from white to pure black #000000. Do NOT modify, redraw, or change the character in any way. Keep the exact same character, pose, clothing, and details. Only replace the white background with black.',
+        stableModel
       )
 
       // 3단계: 두 이미지 비교해서 알파 추출

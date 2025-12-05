@@ -96,7 +96,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       const whiteResult = await editImage(
         apiKey,
         base64Data,
-        'Change the background to pure solid white #FFFFFF. Keep the subject exactly the same. Only change the background color to white.',
+        'Change ONLY the background color to pure solid white #FFFFFF. Do NOT modify, redraw, or change the subject in any way. Keep the exact same subject, pose, and details. Only replace the background with white.',
         model,
         mimeType
       )
@@ -106,8 +106,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       setStatusText('2/3 검정배경으로 변환 중...')
       const blackResult = await editImage(
         apiKey,
-        whiteResult.base64, // 흰배경 이미지를 기반으로 변환
-        'Change the white background to solid pure black #000000. Keep everything else exactly the same. Do not modify the character at all, only change the background color.',
+        whiteResult.base64,
+        'Change ONLY the background color from white to pure black #000000. Do NOT modify, redraw, or change the subject in any way. Keep the exact same subject, pose, and details. Only replace the white background with black.',
         model
       )
       setBlackImage(blackResult.url)
