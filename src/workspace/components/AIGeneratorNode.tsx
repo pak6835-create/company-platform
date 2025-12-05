@@ -138,6 +138,15 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
 
   // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
   useEffect(() => {
+    const imageUrl = generatedImages[0]?.url || null
+    console.log('[AIGenerator] 노드 데이터 업데이트:', {
+      id,
+      hasApiKey: !!apiKey,
+      model,
+      hasImage: !!imageUrl,
+      imageCount: generatedImages.length
+    })
+
     setNodes((nds) =>
       nds.map((n) => {
         if (n.id === id) {
@@ -147,7 +156,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
               ...n.data,
               apiKey,
               model,
-              lastGeneratedImage: generatedImages[0]?.url || null,
+              lastGeneratedImage: imageUrl,
               lastPrompt: generatedImages[0]?.prompt || null,
             },
           }
