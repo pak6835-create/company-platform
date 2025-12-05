@@ -44,35 +44,35 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
   const [outputImage, setOutputImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
-  const { setNodes, getNodes } = useReactFlow()
+  const { setNodes, getNodes, getEdges } = useReactFlow()
 
-  // 연결된 노드에서 이미지와 API 정보 가져오기
-  const edges = useStore((s) => s.edges || [])
-  const nodes = useStore((s) => s.nodes || [])
+  // 연결 상태 변화 감지를 위한 트리거
+  const storeEdges = useStore((s) => s.edges || [])
+  const storeNodes = useStore((s) => s.nodes || [])
 
-  // AI 생성기에서 연결된 정보 찾기
+  // 연결된 데이터 가져오기 (useReactFlow 사용)
   const connectedData = useMemo(() => {
-    if (!Array.isArray(edges) || !Array.isArray(nodes)) {
-      console.log('[PostProcess] edges나 nodes가 배열이 아님')
-      return null
-    }
+    const edges = getEdges()
+    const nodes = getNodes()
 
     console.log('[PostProcess] 현재 노드 ID:', id)
-    console.log('[PostProcess] 전체 edges:', edges.map(e => ({ source: e.source, target: e.target })))
+    console.log('[PostProcess] getEdges() 결과:', edges.length, '개')
+    console.log('[PostProcess] getNodes() 결과:', nodes.length, '개')
 
     const sourceEdge = edges.find((e) => e && e.target === id)
     if (!sourceEdge) {
       console.log('[PostProcess] 연결된 edge 없음')
       return null
     }
-    console.log('[PostProcess] 찾은 edge:', sourceEdge)
+    console.log('[PostProcess] 찾은 edge:', sourceEdge.source, '->', sourceEdge.target)
 
     const sourceNode = nodes.find((n) => n && n.id === sourceEdge.source)
     if (!sourceNode) {
-      console.log('[PostProcess] source 노드를 찾을 수 없음')
+      console.log('[PostProcess] source 노드를 찾을 수 없음, 찾는 ID:', sourceEdge.source)
+      console.log('[PostProcess] 사용 가능한 노드 ID들:', nodes.map(n => n.id))
       return null
     }
-    console.log('[PostProcess] 연결된 노드:', sourceNode.type, sourceNode.data)
+    console.log('[PostProcess] 연결된 노드:', sourceNode.type, 'data:', Object.keys(sourceNode.data || {}))
 
     // AI 생성기 노드에서 정보 가져오기
     if (sourceNode.type === 'aiGenerator') {
@@ -81,7 +81,11 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
         apiKey: sourceNode.data?.apiKey || null,
         model: sourceNode.data?.model || null,
       }
-      console.log('[PostProcess] aiGenerator에서 가져온 데이터:', result)
+      console.log('[PostProcess] aiGenerator에서 가져온 데이터:', {
+        hasImage: !!result.image,
+        hasApiKey: !!result.apiKey,
+        model: result.model
+      })
       return result
     }
     // 이미지 노드에서 이미지 가져오기
@@ -93,7 +97,7 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
       }
     }
     return null
-  }, [edges, nodes, id])
+  }, [storeEdges, storeNodes, id, getEdges, getNodes])
 
   // 연결된 이미지가 변경되면 자동으로 입력 이미지 설정
   useEffect(() => {
