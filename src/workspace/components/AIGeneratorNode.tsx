@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
+import { generateImage, editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS } from '../utils/geminiApi'
 
 // ==================== 카테고리 및 옵션 데이터 ====================
 
@@ -94,13 +95,7 @@ const ASPECT_RATIO_OPTIONS = [
   { id: '9:16', name: '9:16 (세로)', width: 9, height: 16 },
 ]
 
-// Gemini 이미지 생성 모델 목록 (최신순)
-// 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
-const MODELS = [
-  { id: 'gemini-3-pro-image-preview', name: '나노바나나 Pro (최신)' },
-  { id: 'gemini-2.5-flash-image', name: '나노바나나 2.5' },
-  { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2.0' },
-]
+// MODELS는 utils/geminiApi.ts에서 import
 
 // 기본 캐릭터 데이터
 const DEFAULT_CHARACTER = {
@@ -276,63 +271,8 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
     []
   )
 
-  // ==================== 투명 배경 알파 추출 (Medium 기사 방식) ====================
-
-  const extractAlpha = (whiteImageData: ImageData, blackImageData: ImageData): ImageData => {
-    const width = whiteImageData.width
-    const height = whiteImageData.height
-    const whitePixels = whiteImageData.data
-    const blackPixels = blackImageData.data
-    const result = new Uint8ClampedArray(whitePixels.length)
-
-    // 흰색(255,255,255)과 검은색(0,0,0) 사이의 거리: sqrt(255^2 + 255^2 + 255^2) ≈ 441.67
-    const bgDist = Math.sqrt(3 * 255 * 255)
-
-    for (let i = 0; i < width * height; i++) {
-      const offset = i * 4
-
-      // 흰배경 이미지의 RGB
-      const rW = whitePixels[offset]
-      const gW = whitePixels[offset + 1]
-      const bW = whitePixels[offset + 2]
-
-      // 검정배경 이미지의 RGB
-      const rB = blackPixels[offset]
-      const gB = blackPixels[offset + 1]
-      const bB = blackPixels[offset + 2]
-
-      // 두 픽셀 사이의 거리 계산
-      const pixelDist = Math.sqrt(
-        Math.pow(rW - rB, 2) +
-        Math.pow(gW - gB, 2) +
-        Math.pow(bW - bB, 2)
-      )
-
-      // 알파 계산:
-      // 픽셀이 100% 불투명이면 흑백에서 동일하게 보임 (pixelDist = 0)
-      // 픽셀이 100% 투명이면 배경과 똑같이 보임 (pixelDist = bgDist)
-      let alpha = 1 - (pixelDist / bgDist)
-      alpha = Math.max(0, Math.min(1, alpha))
-
-      // 색상 복구 (검은색 버전에서 전경색 복구)
-      // C = alpha * original, 따라서 original = C / alpha
-      let rOut = 0, gOut = 0, bOut = 0
-      if (alpha > 0.01) {
-        rOut = rB / alpha
-        gOut = gB / alpha
-        bOut = bB / alpha
-      }
-
-      result[offset] = Math.round(Math.min(255, rOut))
-      result[offset + 1] = Math.round(Math.min(255, gOut))
-      result[offset + 2] = Math.round(Math.min(255, bOut))
-      result[offset + 3] = Math.round(alpha * 255)
-    }
-
-    return new ImageData(result, width, height)
-  }
-
   // ==================== AI 이미지 생성 ====================
+  // 공통 API 함수는 utils/geminiApi.ts 사용
 
   const handleGenerate = async () => {
     if (!apiKey) {
@@ -344,139 +284,37 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
     setGenerationStatus('')
 
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      // 1단계: 흰배경 이미지 생성
+      setGenerationStatus('1/3 흰배경 이미지 생성 중...')
+      const whiteResult = await generateImage(apiKey, generatedPrompt, model)
 
-      // 투명 배경 생성이 꺼져있으면 단순 생성
+      // 투명 배경 생성이 꺼져있으면 여기서 끝
       if (!generateTransparent) {
-        setGenerationStatus('이미지 생성 중...')
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: generatedPrompt }] }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-          }),
-        })
-        const result = await response.json()
-        if (result.error) throw new Error(result.error.message)
-
-        let imageBase64: string | null = null
-        for (const part of result.candidates?.[0]?.content?.parts || []) {
-          if (part.inlineData?.data) {
-            imageBase64 = part.inlineData.data
-            break
-          }
-        }
-        if (!imageBase64) throw new Error('이미지 생성 실패')
-
-        const imageUrl = `data:image/png;base64,${imageBase64}`
-        const newImage = { url: imageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
+        const newImage = { url: whiteResult.url, prompt: generatedPrompt.slice(0, 50) + '...' }
         setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
-        emitAssetAdd({ url: imageUrl, prompt: generatedPrompt, timestamp: Date.now() })
+        emitAssetAdd({ url: whiteResult.url, prompt: generatedPrompt, timestamp: Date.now() })
         setGenerationStatus('✅ 완료!')
         return
       }
 
-      // 병렬 처리: 흰배경과 검정배경 동시 생성
-      setGenerationStatus('1/2 흰배경 + 검정배경 이미지 동시 생성 중...')
+      // 2단계: 같은 이미지를 검정배경으로 편집 (순차 처리로 캐릭터 일관성 유지)
+      setGenerationStatus('2/3 검정배경으로 변환 중...')
+      const blackResult = await editImage(
+        apiKey,
+        whiteResult.base64,
+        'Change the white background to solid pure black #000000. Keep everything else exactly the same. Do not modify the character at all, only change the background color.',
+        model
+      )
 
-      // 검정배경용 프롬프트 생성
-      const blackBgPrompt = generatedPrompt.replace(
-        /Background:.*(?:\n|$)/,
-        'Background: Pure solid black #000000, no shadows, no floor, no environment.\n'
-      ).replace(/#FFFFFF/g, '#000000')
-
-      // 병렬로 두 이미지 생성
-      const [whiteResponse, blackResponse] = await Promise.all([
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: generatedPrompt }] }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-          }),
-        }),
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: blackBgPrompt }] }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-          }),
-        }),
+      // 3단계: 두 이미지 비교해서 알파 추출
+      setGenerationStatus('3/3 투명 배경 생성 중...')
+      const [whiteData, blackData] = await Promise.all([
+        loadImageData(whiteResult.url),
+        loadImageData(blackResult.url),
       ])
 
-      const [whiteResult, blackResult] = await Promise.all([
-        whiteResponse.json(),
-        blackResponse.json(),
-      ])
-
-      if (whiteResult.error) throw new Error(whiteResult.error.message)
-      if (blackResult.error) throw new Error(blackResult.error.message)
-
-      let whiteImageBase64: string | null = null
-      let blackImageBase64: string | null = null
-
-      for (const part of whiteResult.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData?.data) {
-          whiteImageBase64 = part.inlineData.data
-          break
-        }
-      }
-      for (const part of blackResult.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData?.data) {
-          blackImageBase64 = part.inlineData.data
-          break
-        }
-      }
-
-      if (!whiteImageBase64) throw new Error('흰배경 이미지 생성 실패')
-      if (!blackImageBase64) throw new Error('검정배경 이미지 생성 실패')
-
-      const whiteImageUrl = `data:image/png;base64,${whiteImageBase64}`
-      const blackImageUrl = `data:image/png;base64,${blackImageBase64}`
-
-      // 2단계: 두 이미지 비교해서 알파 추출
-      setGenerationStatus('2/2 투명 배경 생성 중...')
-
-      const transparentUrl = await new Promise<string>((resolve, reject) => {
-        const whiteImg = new Image()
-        const blackImg = new Image()
-        let loadedCount = 0
-
-        const checkBothLoaded = () => {
-          loadedCount++
-          if (loadedCount === 2) {
-            const canvas = document.createElement('canvas')
-            canvas.width = whiteImg.width
-            canvas.height = whiteImg.height
-            const ctx = canvas.getContext('2d')!
-
-            // 흰배경 이미지 데이터
-            ctx.drawImage(whiteImg, 0, 0)
-            const whiteData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-            // 검정배경 이미지 데이터
-            ctx.clearRect(0, 0, canvas.width, canvas.height)
-            ctx.drawImage(blackImg, 0, 0)
-            const blackData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-            // 알파 추출
-            const resultData = extractAlpha(whiteData, blackData)
-            ctx.putImageData(resultData, 0, 0)
-
-            resolve(canvas.toDataURL('image/png'))
-          }
-        }
-
-        whiteImg.onload = checkBothLoaded
-        blackImg.onload = checkBothLoaded
-        whiteImg.onerror = () => reject(new Error('흰배경 이미지 로드 실패'))
-        blackImg.onerror = () => reject(new Error('검정배경 이미지 로드 실패'))
-
-        whiteImg.src = whiteImageUrl
-        blackImg.src = blackImageUrl
-      })
+      const resultData = extractAlpha(whiteData, blackData)
+      const transparentUrl = imageDataToUrl(resultData)
 
       const newImage = { url: transparentUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
       setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))

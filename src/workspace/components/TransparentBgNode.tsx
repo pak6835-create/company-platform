@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
+import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS } from '../utils/geminiApi'
 
 // 기존 이미지를 투명 배경으로 변환하는 노드
 // AI를 사용하여 흰배경/검정배경 버전을 생성하고 비교하여 알파 추출
@@ -11,52 +12,6 @@ interface TransparentBgNodeData {
 // 어셋 라이브러리 이벤트
 const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number }) => {
   window.dispatchEvent(new CustomEvent('asset-add', { detail: asset }))
-}
-
-// 알파 추출 함수 (Medium 기사 방식)
-const extractAlpha = (whiteImageData: ImageData, blackImageData: ImageData): ImageData => {
-  const width = whiteImageData.width
-  const height = whiteImageData.height
-  const whitePixels = whiteImageData.data
-  const blackPixels = blackImageData.data
-  const result = new Uint8ClampedArray(whitePixels.length)
-
-  const bgDist = Math.sqrt(3 * 255 * 255)
-
-  for (let i = 0; i < width * height; i++) {
-    const offset = i * 4
-
-    const rW = whitePixels[offset]
-    const gW = whitePixels[offset + 1]
-    const bW = whitePixels[offset + 2]
-
-    const rB = blackPixels[offset]
-    const gB = blackPixels[offset + 1]
-    const bB = blackPixels[offset + 2]
-
-    const pixelDist = Math.sqrt(
-      Math.pow(rW - rB, 2) +
-      Math.pow(gW - gB, 2) +
-      Math.pow(bW - bB, 2)
-    )
-
-    let alpha = 1 - (pixelDist / bgDist)
-    alpha = Math.max(0, Math.min(1, alpha))
-
-    let rOut = 0, gOut = 0, bOut = 0
-    if (alpha > 0.01) {
-      rOut = rB / alpha
-      gOut = gB / alpha
-      bOut = bB / alpha
-    }
-
-    result[offset] = Math.round(Math.min(255, rOut))
-    result[offset + 1] = Math.round(Math.min(255, gOut))
-    result[offset + 2] = Math.round(Math.min(255, bOut))
-    result[offset + 3] = Math.round(alpha * 255)
-  }
-
-  return new ImageData(result, width, height)
 }
 
 export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentBgNodeData>) {
@@ -114,7 +69,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     }
   }
 
-  // 투명 배경 처리
+  // 투명 배경 처리 (순차 처리 방식 - 캐릭터 일관성 유지)
   const handleProcess = async () => {
     if (!apiKey) {
       setStatusText('⚠️ API 키를 입력하세요')
@@ -126,7 +81,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     }
 
     setIsProcessing(true)
-    setStatusText('1/2 흰배경 + 검정배경 변환 중...')
+    setStatusText('1/3 흰배경으로 변환 중...')
     setWhiteImage(null)
     setBlackImage(null)
     setTransparentImage(null)
@@ -135,109 +90,37 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       // base64 추출
       const base64Data = uploadedImage.split(',')[1]
       const mimeType = uploadedImage.split(';')[0].split(':')[1]
+      const model = MODELS[0].id // 안정 모델 사용
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`
+      // 1단계: 흰배경으로 변환
+      const whiteResult = await editImage(
+        apiKey,
+        base64Data,
+        'Change the background to pure solid white #FFFFFF. Keep the subject exactly the same. Only change the background color to white.',
+        model,
+        mimeType
+      )
+      setWhiteImage(whiteResult.url)
 
-      // 병렬로 흰배경/검정배경 변환
-      const [whiteResponse, blackResponse] = await Promise.all([
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { inlineData: { mimeType, data: base64Data } },
-                { text: 'Change the background to pure solid white #FFFFFF. Keep the subject exactly the same. Only change the background color to white.' }
-              ]
-            }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-          }),
-        }),
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { inlineData: { mimeType, data: base64Data } },
-                { text: 'Change the background to pure solid black #000000. Keep the subject exactly the same. Only change the background color to black.' }
-              ]
-            }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-          }),
-        }),
+      // 2단계: 검정배경으로 변환 (순차 처리로 캐릭터 일관성 유지)
+      setStatusText('2/3 검정배경으로 변환 중...')
+      const blackResult = await editImage(
+        apiKey,
+        whiteResult.base64, // 흰배경 이미지를 기반으로 변환
+        'Change the white background to solid pure black #000000. Keep everything else exactly the same. Do not modify the character at all, only change the background color.',
+        model
+      )
+      setBlackImage(blackResult.url)
+
+      // 3단계: 알파 추출 (공통 유틸리티 사용)
+      setStatusText('3/3 투명 배경 생성 중...')
+      const [whiteData, blackData] = await Promise.all([
+        loadImageData(whiteResult.url),
+        loadImageData(blackResult.url),
       ])
 
-      const [whiteResult, blackResult] = await Promise.all([
-        whiteResponse.json(),
-        blackResponse.json(),
-      ])
-
-      if (whiteResult.error) throw new Error(whiteResult.error.message)
-      if (blackResult.error) throw new Error(blackResult.error.message)
-
-      let whiteImageBase64: string | null = null
-      let blackImageBase64: string | null = null
-
-      for (const part of whiteResult.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData?.data) {
-          whiteImageBase64 = part.inlineData.data
-          break
-        }
-      }
-      for (const part of blackResult.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData?.data) {
-          blackImageBase64 = part.inlineData.data
-          break
-        }
-      }
-
-      if (!whiteImageBase64) throw new Error('흰배경 변환 실패')
-      if (!blackImageBase64) throw new Error('검정배경 변환 실패')
-
-      const whiteUrl = `data:image/png;base64,${whiteImageBase64}`
-      const blackUrl = `data:image/png;base64,${blackImageBase64}`
-
-      setWhiteImage(whiteUrl)
-      setBlackImage(blackUrl)
-      setStatusText('2/2 투명 배경 생성 중...')
-
-      // 알파 추출
-      const transparentUrl = await new Promise<string>((resolve, reject) => {
-        const whiteImg = new Image()
-        const blackImg = new Image()
-        let loadedCount = 0
-
-        const checkBothLoaded = () => {
-          loadedCount++
-          if (loadedCount === 2) {
-            const canvas = document.createElement('canvas')
-            canvas.width = whiteImg.width
-            canvas.height = whiteImg.height
-            const ctx = canvas.getContext('2d')!
-
-            ctx.drawImage(whiteImg, 0, 0)
-            const whiteData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height)
-            ctx.drawImage(blackImg, 0, 0)
-            const blackData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-            const resultData = extractAlpha(whiteData, blackData)
-            ctx.putImageData(resultData, 0, 0)
-
-            resolve(canvas.toDataURL('image/png'))
-          }
-        }
-
-        whiteImg.onload = checkBothLoaded
-        blackImg.onload = checkBothLoaded
-        whiteImg.onerror = () => reject(new Error('이미지 로드 실패'))
-        blackImg.onerror = () => reject(new Error('이미지 로드 실패'))
-
-        whiteImg.src = whiteUrl
-        blackImg.src = blackUrl
-      })
+      const resultData = extractAlpha(whiteData, blackData)
+      const transparentUrl = imageDataToUrl(resultData)
 
       setTransparentImage(transparentUrl)
       setStatusText('✅ 완료!')
