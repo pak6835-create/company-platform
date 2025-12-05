@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 
-// Medium 기사 방식: 흰배경/검정배경 이미지를 한번에 생성하고 비교
-// https://jidefr.medium.com/generating-transparent-background-images-with-nano-banana-pro-2-1866c88a33c5
+// 기존 이미지를 투명 배경으로 변환하는 노드
+// AI를 사용하여 흰배경/검정배경 버전을 생성하고 비교하여 알파 추출
 
 interface TransparentBgNodeData {
   apiKey?: string
-  prompt?: string
 }
 
 // 어셋 라이브러리 이벤트
@@ -14,93 +13,60 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number })
   window.dispatchEvent(new CustomEvent('asset-add', { detail: asset }))
 }
 
-// 두 이미지를 비교해서 투명 배경 생성 (Medium 기사 방식)
-const createTransparentImage = (
-  whiteCanvas: HTMLCanvasElement,
-  blackCanvas: HTMLCanvasElement
-): string => {
-  const width = whiteCanvas.width
-  const height = blackCanvas.height
+// 알파 추출 함수 (Medium 기사 방식)
+const extractAlpha = (whiteImageData: ImageData, blackImageData: ImageData): ImageData => {
+  const width = whiteImageData.width
+  const height = whiteImageData.height
+  const whitePixels = whiteImageData.data
+  const blackPixels = blackImageData.data
+  const result = new Uint8ClampedArray(whitePixels.length)
 
-  const whiteCtx = whiteCanvas.getContext('2d')!
-  const blackCtx = blackCanvas.getContext('2d')!
+  const bgDist = Math.sqrt(3 * 255 * 255)
 
-  const whiteData = whiteCtx.getImageData(0, 0, width, height)
-  const blackData = blackCtx.getImageData(0, 0, width, height)
+  for (let i = 0; i < width * height; i++) {
+    const offset = i * 4
 
-  const whitePixels = whiteData.data
-  const blackPixels = blackData.data
+    const rW = whitePixels[offset]
+    const gW = whitePixels[offset + 1]
+    const bW = whitePixels[offset + 2]
 
-  // 결과 캔버스
-  const resultCanvas = document.createElement('canvas')
-  resultCanvas.width = width
-  resultCanvas.height = height
-  const resultCtx = resultCanvas.getContext('2d')!
-  const resultData = resultCtx.createImageData(width, height)
-  const resultPixels = resultData.data
+    const rB = blackPixels[offset]
+    const gB = blackPixels[offset + 1]
+    const bB = blackPixels[offset + 2]
 
-  for (let i = 0; i < whitePixels.length; i += 4) {
-    const wR = whitePixels[i]
-    const wG = whitePixels[i + 1]
-    const wB = whitePixels[i + 2]
+    const pixelDist = Math.sqrt(
+      Math.pow(rW - rB, 2) +
+      Math.pow(gW - gB, 2) +
+      Math.pow(bW - bB, 2)
+    )
 
-    const bR = blackPixels[i]
-    const bG = blackPixels[i + 1]
-    const bB = blackPixels[i + 2]
+    let alpha = 1 - (pixelDist / bgDist)
+    alpha = Math.max(0, Math.min(1, alpha))
 
-    // 알파값 계산: 흰배경과 검정배경의 차이로 계산
-    // 배경: 흰배경=255, 검정배경=0 -> 차이=255 -> alpha=0 (투명)
-    // 캐릭터: 흰배경=색상, 검정배경=같은색상 -> 차이=0 -> alpha=255 (불투명)
-    const diffR = wR - bR
-    const diffG = wG - bG
-    const diffB = wB - bB
-
-    // 평균 차이로 알파 계산 (차이가 클수록 배경 = 투명)
-    const avgDiff = (diffR + diffG + diffB) / 3
-    const alpha = Math.round(255 - avgDiff)
-
-    if (alpha < 10) {
-      // 완전 투명 (배경)
-      resultPixels[i] = 0
-      resultPixels[i + 1] = 0
-      resultPixels[i + 2] = 0
-      resultPixels[i + 3] = 0
-    } else if (alpha > 245) {
-      // 완전 불투명 (캐릭터) - 검정배경 이미지의 색상 사용
-      resultPixels[i] = bR
-      resultPixels[i + 1] = bG
-      resultPixels[i + 2] = bB
-      resultPixels[i + 3] = 255
-    } else {
-      // 반투명 (경계) - 알파 블렌딩으로 원본 색상 복원
-      // 흰배경 이미지: C = alpha * original + (1-alpha) * 255
-      // 검정배경 이미지: C = alpha * original + (1-alpha) * 0 = alpha * original
-      // 따라서: original = blackPixel / alpha (alpha > 0일 때)
-      const a = alpha / 255
-      if (a > 0.01) {
-        resultPixels[i] = Math.min(255, Math.round(bR / a))
-        resultPixels[i + 1] = Math.min(255, Math.round(bG / a))
-        resultPixels[i + 2] = Math.min(255, Math.round(bB / a))
-      } else {
-        resultPixels[i] = bR
-        resultPixels[i + 1] = bG
-        resultPixels[i + 2] = bB
-      }
-      resultPixels[i + 3] = alpha
+    let rOut = 0, gOut = 0, bOut = 0
+    if (alpha > 0.01) {
+      rOut = rB / alpha
+      gOut = gB / alpha
+      bOut = bB / alpha
     }
+
+    result[offset] = Math.round(Math.min(255, rOut))
+    result[offset + 1] = Math.round(Math.min(255, gOut))
+    result[offset + 2] = Math.round(Math.min(255, bOut))
+    result[offset + 3] = Math.round(alpha * 255)
   }
 
-  resultCtx.putImageData(resultData, 0, 0)
-  return resultCanvas.toDataURL('image/png')
+  return new ImageData(result, width, height)
 }
 
 export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentBgNodeData>) {
   const { setNodes } = useReactFlow()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [apiKey, setApiKey] = useState(data.apiKey || '')
   const [showApiKey, setShowApiKey] = useState(false)
-  const [prompt, setPrompt] = useState(data.prompt || 'a cute cartoon cat sitting, simple design')
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [whiteImage, setWhiteImage] = useState<string | null>(null)
   const [blackImage, setBlackImage] = useState<string | null>(null)
@@ -109,123 +75,184 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
   // API 키 저장
   useEffect(() => {
     setNodes((nds) =>
-      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, apiKey, prompt } } : n))
+      nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, apiKey } } : n))
     )
-  }, [apiKey, prompt, id, setNodes])
+  }, [apiKey, id, setNodes])
 
-  // Medium 기사 방식: 한번에 두 이미지 생성
-  const handleGenerate = async () => {
+  // 파일 업로드 처리
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      setUploadedImage(dataUrl)
+      setWhiteImage(null)
+      setBlackImage(null)
+      setTransparentImage(null)
+      setStatusText('')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 드래그 앤 드롭 처리
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string
+        setUploadedImage(dataUrl)
+        setWhiteImage(null)
+        setBlackImage(null)
+        setTransparentImage(null)
+        setStatusText('')
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // 투명 배경 처리
+  const handleProcess = async () => {
     if (!apiKey) {
-      setStatusText('API 키를 입력하세요')
+      setStatusText('⚠️ API 키를 입력하세요')
+      return
+    }
+    if (!uploadedImage) {
+      setStatusText('⚠️ 이미지를 업로드하세요')
       return
     }
 
-    setIsGenerating(true)
-    setStatusText('이미지 생성 중... (2장)')
+    setIsProcessing(true)
+    setStatusText('1/2 흰배경 + 검정배경 변환 중...')
     setWhiteImage(null)
     setBlackImage(null)
     setTransparentImage(null)
 
     try {
-      // 핵심: 한 번의 API 호출로 흰배경 + 검정배경 동시 요청
-      const fullPrompt = `Generate two images side by side in a single image:
-LEFT HALF: ${prompt}, on a pure white background (#FFFFFF)
-RIGHT HALF: exactly the same image, but on a pure black background (#000000)
-
-IMPORTANT:
-- Both halves must show EXACTLY the same subject in the same pose and position
-- The ONLY difference should be the background color
-- Make sure the subject is centered in each half
-- No border or separator between the halves`
+      // base64 추출
+      const base64Data = uploadedImage.split(',')[1]
+      const mimeType = uploadedImage.split(';')[0].split(':')[1]
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`
-      const requestBody = {
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE'],
-        },
-      }
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      })
+      // 병렬로 흰배경/검정배경 변환
+      const [whiteResponse, blackResponse] = await Promise.all([
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: { mimeType, data: base64Data } },
+                { text: 'Change the background to pure solid white #FFFFFF. Keep the subject exactly the same. Only change the background color to white.' }
+              ]
+            }],
+            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          }),
+        }),
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: { mimeType, data: base64Data } },
+                { text: 'Change the background to pure solid black #000000. Keep the subject exactly the same. Only change the background color to black.' }
+              ]
+            }],
+            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          }),
+        }),
+      ])
 
-      const result = await response.json()
+      const [whiteResult, blackResult] = await Promise.all([
+        whiteResponse.json(),
+        blackResponse.json(),
+      ])
 
-      if (result.error) {
-        throw new Error(result.error.message)
-      }
+      if (whiteResult.error) throw new Error(whiteResult.error.message)
+      if (blackResult.error) throw new Error(blackResult.error.message)
 
-      // 이미지 추출
-      let combinedImageUrl: string | null = null
-      const parts = result.candidates?.[0]?.content?.parts || []
-      for (const part of parts) {
+      let whiteImageBase64: string | null = null
+      let blackImageBase64: string | null = null
+
+      for (const part of whiteResult.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData?.data) {
-          combinedImageUrl = `data:image/png;base64,${part.inlineData.data}`
+          whiteImageBase64 = part.inlineData.data
+          break
+        }
+      }
+      for (const part of blackResult.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData?.data) {
+          blackImageBase64 = part.inlineData.data
           break
         }
       }
 
-      if (!combinedImageUrl) {
-        throw new Error('이미지 생성 실패')
-      }
+      if (!whiteImageBase64) throw new Error('흰배경 변환 실패')
+      if (!blackImageBase64) throw new Error('검정배경 변환 실패')
 
-      setStatusText('이미지 분리 중...')
+      const whiteUrl = `data:image/png;base64,${whiteImageBase64}`
+      const blackUrl = `data:image/png;base64,${blackImageBase64}`
 
-      // 이미지 로드 후 좌우 분리
-      const img = new Image()
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => {
-          const halfWidth = Math.floor(img.width / 2)
-          const height = img.height
+      setWhiteImage(whiteUrl)
+      setBlackImage(blackUrl)
+      setStatusText('2/2 투명 배경 생성 중...')
 
-          // 왼쪽 절반 (흰배경)
-          const whiteCanvas = document.createElement('canvas')
-          whiteCanvas.width = halfWidth
-          whiteCanvas.height = height
-          const whiteCtx = whiteCanvas.getContext('2d')!
-          whiteCtx.drawImage(img, 0, 0, halfWidth, height, 0, 0, halfWidth, height)
+      // 알파 추출
+      const transparentUrl = await new Promise<string>((resolve, reject) => {
+        const whiteImg = new Image()
+        const blackImg = new Image()
+        let loadedCount = 0
 
-          // 오른쪽 절반 (검정배경)
-          const blackCanvas = document.createElement('canvas')
-          blackCanvas.width = halfWidth
-          blackCanvas.height = height
-          const blackCtx = blackCanvas.getContext('2d')!
-          blackCtx.drawImage(img, halfWidth, 0, halfWidth, height, 0, 0, halfWidth, height)
+        const checkBothLoaded = () => {
+          loadedCount++
+          if (loadedCount === 2) {
+            const canvas = document.createElement('canvas')
+            canvas.width = whiteImg.width
+            canvas.height = whiteImg.height
+            const ctx = canvas.getContext('2d')!
 
-          const whiteUrl = whiteCanvas.toDataURL('image/png')
-          const blackUrl = blackCanvas.toDataURL('image/png')
+            ctx.drawImage(whiteImg, 0, 0)
+            const whiteData = ctx.getImageData(0, 0, canvas.width, canvas.height)
 
-          setWhiteImage(whiteUrl)
-          setBlackImage(blackUrl)
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(blackImg, 0, 0)
+            const blackData = ctx.getImageData(0, 0, canvas.width, canvas.height)
 
-          setStatusText('투명 배경 생성 중...')
+            const resultData = extractAlpha(whiteData, blackData)
+            ctx.putImageData(resultData, 0, 0)
 
-          // 두 이미지 비교해서 투명 배경 생성
-          const transparentUrl = createTransparentImage(whiteCanvas, blackCanvas)
-          setTransparentImage(transparentUrl)
-
-          // 어셋 라이브러리에 추가
-          emitAssetAdd({
-            url: transparentUrl,
-            prompt: prompt,
-            timestamp: Date.now(),
-          })
-
-          resolve()
+            resolve(canvas.toDataURL('image/png'))
+          }
         }
-        img.onerror = () => reject(new Error('이미지 로드 실패'))
-        img.src = combinedImageUrl!
+
+        whiteImg.onload = checkBothLoaded
+        blackImg.onload = checkBothLoaded
+        whiteImg.onerror = () => reject(new Error('이미지 로드 실패'))
+        blackImg.onerror = () => reject(new Error('이미지 로드 실패'))
+
+        whiteImg.src = whiteUrl
+        blackImg.src = blackUrl
       })
 
+      setTransparentImage(transparentUrl)
       setStatusText('✅ 완료!')
+
+      // 어셋에 추가
+      emitAssetAdd({
+        url: transparentUrl,
+        prompt: '투명 배경 변환',
+        timestamp: Date.now(),
+      })
     } catch (err) {
-      console.error('생성 오류:', err)
-      setStatusText(`❌ ${err instanceof Error ? err.message : '생성 실패'}`)
+      console.error('처리 오류:', err)
+      setStatusText(`❌ ${err instanceof Error ? err.message : '처리 실패'}`)
     } finally {
-      setIsGenerating(false)
+      setIsProcessing(false)
     }
   }
 
@@ -236,11 +263,11 @@ IMPORTANT:
         background: '#1a1a2e',
         borderRadius: 12,
         border: selected ? '2px solid #00d4ff' : '2px solid #333',
-        minWidth: 350,
+        minWidth: 380,
         color: 'white',
       }}
     >
-      <NodeResizer isVisible={selected} minWidth={350} minHeight={400} />
+      <NodeResizer isVisible={selected} minWidth={380} minHeight={450} />
 
       {/* 헤더 */}
       <div
@@ -252,7 +279,7 @@ IMPORTANT:
           fontSize: 14,
         }}
       >
-        🎭 투명 배경 생성기 (Medium 방식)
+        🖼️ 이미지 배경 투명화
       </div>
 
       <div className="nodrag" style={{ padding: 16 }} onMouseDown={(e) => e.stopPropagation()}>
@@ -288,54 +315,72 @@ IMPORTANT:
                 cursor: 'pointer',
               }}
             >
-              {showApiKey ? '숨김' : '보기'}
+              {showApiKey ? '🙈' : '👁️'}
             </button>
           </div>
         </div>
 
-        {/* 프롬프트 */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 12, color: '#aaa', display: 'block', marginBottom: 4 }}>
-            프롬프트 (배경 제외하고 주제만)
-          </label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="예: a cute cartoon cat sitting"
-            rows={3}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              borderRadius: 6,
-              border: '1px solid #444',
-              background: '#2a2a3e',
-              color: 'white',
-              fontSize: 12,
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
+        {/* 이미지 업로드 영역 */}
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          style={{
+            border: '2px dashed #444',
+            borderRadius: 8,
+            padding: 20,
+            textAlign: 'center',
+            cursor: 'pointer',
+            marginBottom: 12,
+            background: uploadedImage ? 'transparent' : '#2a2a3e',
+          }}
+        >
+          {uploadedImage ? (
+            <img
+              src={uploadedImage}
+              alt="uploaded"
+              style={{
+                maxWidth: '100%',
+                maxHeight: 150,
+                borderRadius: 6,
+              }}
+            />
+          ) : (
+            <>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
+              <div style={{ fontSize: 12, color: '#888' }}>
+                클릭하거나 이미지를 드래그해서 업로드
+              </div>
+            </>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
           />
         </div>
 
-        {/* 생성 버튼 */}
+        {/* 처리 버튼 */}
         <button
-          onClick={handleGenerate}
-          disabled={isGenerating || !apiKey}
+          onClick={handleProcess}
+          disabled={isProcessing || !apiKey || !uploadedImage}
           style={{
             width: '100%',
             padding: '12px',
             borderRadius: 8,
             border: 'none',
-            background: isGenerating
+            background: isProcessing
               ? '#555'
               : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
             fontWeight: 'bold',
-            cursor: isGenerating ? 'wait' : 'pointer',
+            cursor: isProcessing ? 'wait' : 'pointer',
             marginBottom: 12,
           }}
         >
-          {isGenerating ? '⏳ 생성 중...' : '🚀 투명 배경 이미지 생성'}
+          {isProcessing ? '⏳ 처리 중...' : '🎭 배경 투명화'}
         </button>
 
         {/* 상태 */}
@@ -343,7 +388,7 @@ IMPORTANT:
           <div
             style={{
               padding: '8px 12px',
-              background: '#2a2a3e',
+              background: statusText.includes('✅') ? '#1a3d1a' : statusText.includes('❌') ? '#3d1a1a' : '#2a2a3e',
               borderRadius: 6,
               fontSize: 12,
               marginBottom: 12,
@@ -381,7 +426,7 @@ IMPORTANT:
               )}
             </div>
 
-            {/* 최종 결과 (크게) */}
+            {/* 최종 결과 */}
             {transparentImage && (
               <div>
                 <div style={{ fontSize: 12, color: '#00d4ff', marginBottom: 4, fontWeight: 'bold' }}>
@@ -393,38 +438,37 @@ IMPORTANT:
                   style={{
                     width: '100%',
                     borderRadius: 8,
-                    background:
-                      'repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px',
+                    background: 'repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px',
                   }}
                 />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button
-                    onClick={() => {
-                      const link = document.createElement('a')
-                      link.href = transparentImage
-                      link.download = `transparent-${Date.now()}.png`
-                      link.click()
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: '#00d4ff',
-                      color: '#000',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ⬇️ PNG 다운로드
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    const link = document.createElement('a')
+                    link.href = transparentImage
+                    link.download = `transparent-${Date.now()}.png`
+                    link.click()
+                  }}
+                  style={{
+                    width: '100%',
+                    marginTop: 8,
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: '#00d4ff',
+                    color: '#000',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⬇️ PNG 다운로드
+                </button>
               </div>
             )}
           </div>
         )}
       </div>
 
+      <Handle type="target" position={Position.Left} id="in" />
       <Handle type="source" position={Position.Right} id="out" />
     </div>
   )

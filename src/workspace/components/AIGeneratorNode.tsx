@@ -144,6 +144,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [generationStatus, setGenerationStatus] = useState('')
   const [resolution, setResolution] = useState('2k') // 해상도
   const [aspectRatio, setAspectRatio] = useState('16:9') // 종횡비
+  const [generateAllAngles, setGenerateAllAngles] = useState(false) // 세 각도 한 장에 생성
 
   // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
   useEffect(() => {
@@ -207,12 +208,43 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       weaponDesc = `holding ${character.weapon.item} in ${character.weapon.position === '양손' ? 'both hands' : character.weapon.position === '등에' ? 'back' : character.weapon.position === '허리에' ? 'waist' : character.weapon.position === '왼손' ? 'left hand' : 'right hand'}`
     }
 
-    // 해상도 및 종횡비 정보 가져오기
+    // 해상도 정보
     const resInfo = RESOLUTION_OPTIONS.find(r => r.id === resolution) || RESOLUTION_OPTIONS[1]
-    const arInfo = ASPECT_RATIO_OPTIONS.find(a => a.id === aspectRatio) || ASPECT_RATIO_OPTIONS[0]
 
-    // 구조화된 프롬프트 생성 - 단일 전신 캐릭터 강조
-    const prompt = `ONE single ${gender} character illustration.
+    // 캐릭터 상세 정보 (공통)
+    const characterDetails = `Character details:
+- Age: ${character.base.age}
+- Body: ${character.base.bodyType} build, ${character.base.height}
+- Face: ${character.face.style} features with ${character.face.eyes}, ${character.face.skinTone} skin
+- Hair: ${character.hair.color} ${character.hair.style}
+- Outfit: ${outfit.length > 0 ? outfit.join(', ') : 'casual clothes'}${accessories.length > 0 ? ', ' + accessories.join(', ') : ''}${weaponDesc ? ', ' + weaponDesc : ''}`
+
+    // 세 각도 한 장 모드
+    if (generateAllAngles) {
+      return `Character turnaround sheet with THREE views of the SAME character side by side:
+LEFT: Front view (facing camera)
+CENTER: Side view (profile, facing right)
+RIGHT: Back view (facing away)
+
+CRITICAL REQUIREMENTS:
+- All three views must be the EXACT SAME character with identical design
+- Each view shows FULL BODY from head to feet
+- Standing pose in all views
+- Equal spacing between views
+- 16:9 wide aspect ratio to fit all three views
+
+${characterDetails}
+
+Style: Korean webtoon style, clean bold outlines, cel-shaded coloring.
+Background: Pure solid white #FFFFFF, no shadows, no floor.
+Image: ${resInfo.name}, 16:9 aspect ratio (wide).
+
+IMPORTANT: Same character, same outfit, same design in all three views.`
+    }
+
+    // 단일 각도 모드
+    const arInfo = ASPECT_RATIO_OPTIONS.find(a => a.id === aspectRatio) || ASPECT_RATIO_OPTIONS[0]
+    return `ONE single ${gender} character illustration.
 
 CRITICAL REQUIREMENTS:
 - EXACTLY ONE character only (not 2, not 3, just 1)
@@ -220,21 +252,14 @@ CRITICAL REQUIREMENTS:
 - Standing pose, ${angle}
 - Centered in frame with space around the character
 
-Character details:
-- Age: ${character.base.age}
-- Body: ${character.base.bodyType} build, ${character.base.height}
-- Face: ${character.face.style} features with ${character.face.eyes}, ${character.face.skinTone} skin
-- Hair: ${character.hair.color} ${character.hair.style}
-- Outfit: ${outfit.length > 0 ? outfit.join(', ') : 'casual clothes'}${accessories.length > 0 ? ', ' + accessories.join(', ') : ''}${weaponDesc ? ', ' + weaponDesc : ''}
+${characterDetails}
 
 Style: Korean webtoon style, clean bold outlines, cel-shaded coloring.
 Background: Pure solid white #FFFFFF, no shadows, no floor, no environment.
 Image: ${resInfo.name}, ${arInfo.id} aspect ratio.
 
 DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, face only, bust only.`
-
-    return prompt
-  }, [character, resolution, aspectRatio])
+  }, [character, resolution, aspectRatio, generateAllAngles])
 
   // ==================== 카테고리별 업데이트 함수 ====================
 
@@ -321,74 +346,98 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
-      // 1단계: 흰배경 이미지 생성
-      setGenerationStatus('1/3 흰배경 이미지 생성 중...')
+      // 투명 배경 생성이 꺼져있으면 단순 생성
+      if (!generateTransparent) {
+        setGenerationStatus('이미지 생성 중...')
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: generatedPrompt }] }],
+            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          }),
+        })
+        const result = await response.json()
+        if (result.error) throw new Error(result.error.message)
 
-      const whiteResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: generatedPrompt }] }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+        let imageBase64: string | null = null
+        for (const part of result.candidates?.[0]?.content?.parts || []) {
+          if (part.inlineData?.data) {
+            imageBase64 = part.inlineData.data
+            break
+          }
+        }
+        if (!imageBase64) throw new Error('이미지 생성 실패')
+
+        const imageUrl = `data:image/png;base64,${imageBase64}`
+        const newImage = { url: imageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
+        setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
+        emitAssetAdd({ url: imageUrl, prompt: generatedPrompt, timestamp: Date.now() })
+        setGenerationStatus('✅ 완료!')
+        return
+      }
+
+      // 병렬 처리: 흰배경과 검정배경 동시 생성
+      setGenerationStatus('1/2 흰배경 + 검정배경 이미지 동시 생성 중...')
+
+      // 검정배경용 프롬프트 생성
+      const blackBgPrompt = generatedPrompt.replace(
+        /Background:.*(?:\n|$)/,
+        'Background: Pure solid black #000000, no shadows, no floor, no environment.\n'
+      ).replace(/#FFFFFF/g, '#000000')
+
+      // 병렬로 두 이미지 생성
+      const [whiteResponse, blackResponse] = await Promise.all([
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: generatedPrompt }] }],
+            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          }),
         }),
-      })
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: blackBgPrompt }] }],
+            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          }),
+        }),
+      ])
 
-      const whiteResult = await whiteResponse.json()
+      const [whiteResult, blackResult] = await Promise.all([
+        whiteResponse.json(),
+        blackResponse.json(),
+      ])
+
       if (whiteResult.error) throw new Error(whiteResult.error.message)
+      if (blackResult.error) throw new Error(blackResult.error.message)
 
       let whiteImageBase64: string | null = null
+      let blackImageBase64: string | null = null
+
       for (const part of whiteResult.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData?.data) {
           whiteImageBase64 = part.inlineData.data
           break
         }
       }
-      if (!whiteImageBase64) throw new Error('흰배경 이미지 생성 실패')
-
-      const whiteImageUrl = `data:image/png;base64,${whiteImageBase64}`
-
-      // 투명 배경 생성이 꺼져있으면 여기서 끝
-      if (!generateTransparent) {
-        const newImage = { url: whiteImageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
-        setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
-        emitAssetAdd({ url: whiteImageUrl, prompt: generatedPrompt, timestamp: Date.now() })
-        setGenerationStatus('✅ 완료!')
-        return
-      }
-
-      // 2단계: 검정배경으로 편집 요청 (같은 이미지를 유지하면서 배경만 변경)
-      setGenerationStatus('2/3 검정배경으로 변환 중...')
-
-      const blackResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { inlineData: { mimeType: 'image/png', data: whiteImageBase64 } },
-              { text: 'Change the white background to solid pure black #000000. Keep everything else exactly the same. Do not modify the character at all, only change the background color.' }
-            ]
-          }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-        }),
-      })
-
-      const blackResult = await blackResponse.json()
-      if (blackResult.error) throw new Error(blackResult.error.message)
-
-      let blackImageBase64: string | null = null
       for (const part of blackResult.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData?.data) {
           blackImageBase64 = part.inlineData.data
           break
         }
       }
-      if (!blackImageBase64) throw new Error('검정배경 변환 실패')
 
+      if (!whiteImageBase64) throw new Error('흰배경 이미지 생성 실패')
+      if (!blackImageBase64) throw new Error('검정배경 이미지 생성 실패')
+
+      const whiteImageUrl = `data:image/png;base64,${whiteImageBase64}`
       const blackImageUrl = `data:image/png;base64,${blackImageBase64}`
 
-      // 3단계: 두 이미지 비교해서 알파 추출
-      setGenerationStatus('3/3 투명 배경 생성 중...')
+      // 2단계: 두 이미지 비교해서 알파 추출
+      setGenerationStatus('2/2 투명 배경 생성 중...')
 
       const transparentUrl = await new Promise<string>((resolve, reject) => {
         const whiteImg = new Image()
@@ -518,13 +567,28 @@ DO NOT: multiple views, turnaround sheet, character sheet, multiple characters, 
                   key={ar.id}
                   className={aspectRatio === ar.id ? 'active' : ''}
                   onClick={() => setAspectRatio(ar.id)}
+                  disabled={generateAllAngles}
                 >
                   {ar.name}
                 </button>
               ))}
             </div>
             <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-              💡 큰 무기를 든 캐릭터는 16:9 추천
+              {generateAllAngles ? '⚠️ 세 각도 모드에서는 16:9 자동 적용' : '💡 큰 무기를 든 캐릭터는 16:9 추천'}
+            </p>
+          </div>
+          <div className="setting-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={generateAllAngles}
+                onChange={(e) => setGenerateAllAngles(e.target.checked)}
+                style={{ width: 18, height: 18 }}
+              />
+              <span>📐 정면/측면/후면 한 장에 생성</span>
+            </label>
+            <p style={{ fontSize: 11, color: '#888', margin: '4px 0 0 26px' }}>
+              세 각도를 한 장의 가로 이미지로 생성 (16:9 자동)
             </p>
           </div>
           <div className="setting-group">
