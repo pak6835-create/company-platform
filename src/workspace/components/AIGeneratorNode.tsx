@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
+import { useState, useCallback, useMemo } from 'react'
+import { NodeProps, NodeResizer, Handle, Position } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
 // ==================== 카테고리 및 옵션 데이터 ====================
@@ -14,6 +14,7 @@ const CATEGORIES = [
   { id: 'accessory', name: '악세서리', icon: '💍' },
   { id: 'weapon', name: '무기', icon: '⚔️' },
   { id: 'pose', name: '포즈', icon: '🏃' },
+  { id: 'settings', name: '설정', icon: '⚙️' },
 ]
 
 const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, string[]>>> = {
@@ -88,10 +89,12 @@ const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, stri
   },
 }
 
-// 모델 목록
+// Gemini 이미지 생성 모델 목록 (최신순)
+// 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
 const MODELS = [
-  { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2' },
-  { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 2.5' },
+  { id: 'imagen-3.0-generate-002', name: 'Imagen 3 (최신)' },
+  { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
 ]
 
 // 기본 캐릭터 데이터
@@ -114,7 +117,7 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number })
 
 // ==================== 메인 컴포넌트 ====================
 
-export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
+export function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
   // API 설정
   const [apiKey, setApiKey] = useState(data.apiKey || '')
   const [model, setModel] = useState(data.model || MODELS[0].id)
@@ -127,13 +130,9 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [selectedCategory, setSelectedCategory] = useState('base')
 
   // UI 상태
-  const [viewMode, setViewMode] = useState<'character' | 'settings'>('character')
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
-
-  const nodeRef = useRef<HTMLDivElement>(null)
-  const { setNodes } = useReactFlow()
 
   // ==================== 프롬프트 자동 생성 ====================
 
@@ -210,35 +209,74 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
 
   const handleGenerate = async () => {
     if (!apiKey) {
-      setError('API 키를 입력하세요')
+      setError('⚙️ 설정에서 API 키를 입력하세요')
       return
     }
     setIsGenerating(true)
     setError('')
 
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      // Imagen 3 모델 사용 시 다른 엔드포인트
+      let endpoint: string
+      let requestBody: object
+
+      if (model.startsWith('imagen')) {
+        // Imagen 3 API
+        endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
+        requestBody = {
+          instances: [{ prompt: generatedPrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: '1:1',
+            safetyFilterLevel: 'block_only_high',
+            personGeneration: 'allow_adult',
+          },
+        }
+      } else {
+        // Gemini 이미지 생성 API
+        endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+        requestBody = {
+          contents: [{ parts: [{ text: generatedPrompt }] }],
+          generationConfig: { responseModalities: ['Text', 'Image'] },
+        }
+      }
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: generatedPrompt }] }],
-          generationConfig: { responseModalities: ['Text', 'Image'] },
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const result = await response.json()
-      if (result.error) throw new Error(result.error.message || result.error)
 
-      const imagePart = result.candidates?.[0]?.content?.parts?.find(
-        (p: { inlineData?: { data: string } }) => p.inlineData?.data
-      )
-      if (!imagePart) throw new Error('이미지 생성 실패')
+      if (result.error) {
+        throw new Error(result.error.message || JSON.stringify(result.error))
+      }
 
-      const imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
+      let imageUrl: string | null = null
+
+      if (model.startsWith('imagen')) {
+        // Imagen 3 응답 처리
+        const predictions = result.predictions
+        if (predictions && predictions.length > 0 && predictions[0].bytesBase64Encoded) {
+          imageUrl = 'data:image/png;base64,' + predictions[0].bytesBase64Encoded
+        }
+      } else {
+        // Gemini 응답 처리
+        const imagePart = result.candidates?.[0]?.content?.parts?.find(
+          (p: { inlineData?: { data: string } }) => p.inlineData?.data
+        )
+        if (imagePart) {
+          imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
+        }
+      }
+
+      if (!imageUrl) {
+        throw new Error('이미지 생성 실패 - 응답에 이미지 데이터가 없습니다')
+      }
+
       const newImage = { url: imageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
-      setGeneratedImages((prev) => [newImage, ...prev].slice(0, 10))
+      setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
 
       emitAssetAdd({ url: imageUrl, prompt: generatedPrompt, timestamp: Date.now() })
 
@@ -246,6 +284,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
         data.onGenerate(imageUrl, generatedPrompt.slice(0, 30) + '...')
       }
     } catch (err) {
+      console.error('이미지 생성 오류:', err)
       setError(err instanceof Error ? err.message : '생성 실패')
     } finally {
       setIsGenerating(false)
@@ -256,7 +295,57 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
 
   const renderSettingsPanel = () => {
     const cat = selectedCategory
+
+    // 설정 카테고리
+    if (cat === 'settings') {
+      return (
+        <div className="char-settings-panel">
+          <h4>⚙️ API 설정</h4>
+          <div className="setting-group">
+            <label>API 키</label>
+            <div className="api-key-row">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Google AI API 키 입력..."
+              />
+              <button onClick={() => setShowApiKey(!showApiKey)}>
+                {showApiKey ? '🙈' : '👁️'}
+              </button>
+            </div>
+          </div>
+          <div className="setting-group">
+            <label>AI 모델</label>
+            <select value={model} onChange={(e) => setModel(e.target.value)}>
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="setting-group">
+            <label>캐릭터 초기화</label>
+            <button
+              className="reset-btn"
+              onClick={() => setCharacter(DEFAULT_CHARACTER)}
+            >
+              🔄 기본값으로 초기화
+            </button>
+          </div>
+          <div className="setting-group api-help">
+            <p>💡 Google AI Studio에서 API 키를 발급받으세요</p>
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">
+              API 키 발급하기 →
+            </a>
+          </div>
+        </div>
+      )
+    }
+
     const opts = OPTIONS_DATA[cat]
+    if (!opts) return null
 
     switch (cat) {
       case 'base':
@@ -719,91 +808,76 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   // ==================== 렌더링 ====================
 
   return (
-    <div
-      ref={nodeRef}
-      className={`ai-generator-node-v2 ${selected ? 'selected' : ''}`}
-    >
+    <div className={`ai-generator-node-v2 ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} id="ref-in" />
       <NodeResizer isVisible={selected} minWidth={600} minHeight={500} />
 
       {/* 헤더 */}
       <div className="aig-header">
         <span>🎨 캐릭터 메이커</span>
-        <div className="aig-header-actions">
-          <button
-            className={viewMode === 'character' ? 'active' : ''}
-            onClick={() => setViewMode('character')}
-          >
-            캐릭터
-          </button>
-          <button
-            className={viewMode === 'settings' ? 'active' : ''}
-            onClick={() => setViewMode('settings')}
-          >
-            ⚙️ 설정
-          </button>
-        </div>
+        <span className="aig-model-badge">{MODELS.find(m => m.id === model)?.name || model}</span>
       </div>
 
       <div className="aig-body nodrag" onMouseDown={(e) => e.stopPropagation()}>
-        {viewMode === 'settings' ? (
-          // API 설정 뷰
-          <div className="aig-settings-view">
-            <div className="aig-field">
-              <label>API 키</label>
-              <div className="aig-input-row">
-                <input
-                  type={showApiKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Google AI API 키 입력..."
-                />
-                <button onClick={() => setShowApiKey(!showApiKey)}>
-                  {showApiKey ? '숨김' : '보기'}
-                </button>
-              </div>
-            </div>
-            <div className="aig-field">
-              <label>모델</label>
-              <select value={model} onChange={(e) => setModel(e.target.value)}>
-                {MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="aig-field">
-              <label>초기화</label>
+        <div className="aig-main-layout">
+          {/* 왼쪽: 카테고리 목록 */}
+          <div className="aig-categories">
+            {CATEGORIES.map((cat) => (
               <button
-                className="aig-reset-btn"
-                onClick={() => setCharacter(DEFAULT_CHARACTER)}
+                key={cat.id}
+                className={`aig-category-btn ${selectedCategory === cat.id ? 'active' : ''} ${cat.id === 'settings' ? 'settings-btn' : ''}`}
+                onClick={() => setSelectedCategory(cat.id)}
               >
-                🔄 캐릭터 초기화
+                <span className="cat-icon">{cat.icon}</span>
+                <span className="cat-name">{cat.name}</span>
               </button>
-            </div>
+            ))}
           </div>
-        ) : (
-          // 캐릭터 메이커 뷰
-          <div className="aig-character-view">
-            {/* 왼쪽: 카테고리 목록 */}
-            <div className="aig-categories">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  className={`aig-category-btn ${selectedCategory === cat.id ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat.id)}
-                >
-                  <span className="cat-icon">{cat.icon}</span>
-                  <span className="cat-name">{cat.name}</span>
-                </button>
-              ))}
-            </div>
 
-            {/* 오른쪽: 설정 패널 */}
-            <div className="aig-settings-content">{renderSettingsPanel()}</div>
+          {/* 중앙: 설정 패널 */}
+          <div className="aig-settings-content">{renderSettingsPanel()}</div>
+
+          {/* 오른쪽: 생성된 이미지 갤러리 */}
+          <div className="aig-gallery-sidebar">
+            <div className="gallery-header">
+              <span>📸 결과</span>
+              {generatedImages.length > 0 && (
+                <button className="clear-btn" onClick={() => setGeneratedImages([])}>
+                  🗑️
+                </button>
+              )}
+            </div>
+            <div className="gallery-scroll">
+              {generatedImages.length === 0 ? (
+                <div className="gallery-empty">
+                  <p>생성된 이미지가<br/>여기에 표시됩니다</p>
+                </div>
+              ) : (
+                generatedImages.map((img, idx) => (
+                  <div key={idx} className="gallery-item">
+                    <img
+                      src={img.url}
+                      alt={`생성 ${idx + 1}`}
+                      onClick={() => window.open(img.url, '_blank')}
+                      title={img.prompt}
+                    />
+                    <button
+                      className="download-btn"
+                      onClick={() => {
+                        const link = document.createElement('a')
+                        link.href = img.url
+                        link.download = `character-${Date.now()}.png`
+                        link.click()
+                      }}
+                    >
+                      ⬇️
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        )}
+        </div>
 
         {/* 프롬프트 미리보기 */}
         <div className="aig-prompt-preview">
@@ -822,39 +896,6 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
         >
           {isGenerating ? '⏳ 생성 중...' : '🚀 AI 이미지 생성'}
         </button>
-
-        {/* 생성된 이미지 갤러리 */}
-        {generatedImages.length > 0 && (
-          <div className="aig-gallery">
-            <label>📸 생성 결과 ({generatedImages.length})</label>
-            <div className="aig-gallery-grid">
-              {generatedImages.map((img, idx) => (
-                <div key={idx} className="aig-gallery-item">
-                  <img
-                    src={img.url}
-                    alt={`생성 ${idx + 1}`}
-                    onClick={() => window.open(img.url, '_blank')}
-                    title={img.prompt}
-                  />
-                  <button
-                    className="aig-download-btn"
-                    onClick={() => {
-                      const link = document.createElement('a')
-                      link.href = img.url
-                      link.download = `character-${Date.now()}.png`
-                      link.click()
-                    }}
-                  >
-                    ⬇️
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button className="aig-clear-btn" onClick={() => setGeneratedImages([])}>
-              🗑️ 결과 비우기
-            </button>
-          </div>
-        )}
       </div>
 
       <Handle type="source" position={Position.Right} id="image-out" />

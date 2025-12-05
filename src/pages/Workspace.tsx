@@ -89,18 +89,15 @@ function WorkspaceCanvas() {
     setEdges,
     onEdgesChange,
     currentBoard,
-    trayItems,
     getBreadcrumbs,
     navigateToBoard,
     boardNameChangeRef,
-    removeFromTray,
     getNewNodeId,
   } = useWorkspace()
 
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [activeTool, setActiveTool] = useState<string>('select')
-  const [showTray, setShowTray] = useState(true)
-  const [showAssetLibrary, setShowAssetLibrary] = useState(false)
+  const [showAssetLibrary, setShowAssetLibrary] = useState(true)
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem('workspace_assets')
     return saved ? JSON.parse(saved) : []
@@ -706,102 +703,41 @@ function WorkspaceCanvas() {
         </ReactFlow>
       </div>
 
-      {/* 하단 트레이 */}
-      {trayItems.length > 0 && showTray && (
-        <div className="bottom-tray">
-          <div className="tray-header">
-            <span className="tray-title">📎 트레이</span>
-            <span className="tray-count">{trayItems.length}</span>
-            <button className="tray-toggle" onClick={() => setShowTray(false)}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          </div>
-          <div className="tray-items">
-            {trayItems.map((item) => (
-              <div key={item.id} className="tray-item">
-                {item.type === 'image' && (
-                  <img
-                    src={(item.data as { imageUrl: string }).imageUrl}
-                    alt="tray item"
-                    className="tray-item-image"
-                  />
-                )}
-                {item.type === 'note' && (
-                  <div
-                    className="tray-item-note"
-                    style={{ backgroundColor: (item.data as { backgroundColor?: string }).backgroundColor }}
-                  />
-                )}
-                {item.type === 'board' && (
-                  <div className="tray-item-board">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
-                      <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                    </svg>
-                  </div>
-                )}
-                <button className="tray-item-remove" onClick={() => removeFromTray(item.id)}>
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
+      {/* 오른쪽 어셋 라이브러리 사이드바 */}
+      <div className={`asset-sidebar ${showAssetLibrary ? 'open' : ''}`}>
+        <div className="asset-sidebar-header">
+          <h3>🖼️ 어셋 ({assets.length})</h3>
+          <button onClick={() => setShowAssetLibrary(!showAssetLibrary)}>
+            {showAssetLibrary ? '→' : '←'}
+          </button>
         </div>
-      )}
-
-      {/* 트레이 열기 버튼 */}
-      {trayItems.length > 0 && !showTray && (
-        <button className="tray-open-btn" onClick={() => setShowTray(true)}>
-          📎 트레이 ({trayItems.length})
-        </button>
-      )}
-
-      {/* 어셋 라이브러리 토글 버튼 */}
-      {!showAssetLibrary && (
-        <button
-          className="asset-library-toggle"
-          onClick={() => setShowAssetLibrary(true)}
-          title="어셋 라이브러리"
-        >
-          🖼️
-        </button>
-      )}
-
-      {/* 어셋 라이브러리 패널 */}
-      {showAssetLibrary && (
-        <div className="asset-library-panel">
-          <div className="asset-library-header">
-            <h3>🖼️ 어셋 라이브러리 ({assets.length})</h3>
-            <button onClick={() => setShowAssetLibrary(false)}>✕</button>
-          </div>
-          <div className="asset-library-content">
+        {showAssetLibrary && (
+          <div className="asset-sidebar-content">
             {assets.length === 0 ? (
-              <div className="asset-library-empty">
-                <p>생성된 이미지가 없습니다</p>
-                <p>AI 생성기로 이미지를 만들어보세요!</p>
+              <div className="asset-sidebar-empty">
+                <p>생성된 이미지가<br/>여기에 저장됩니다</p>
               </div>
             ) : (
-              <div className="asset-library-grid">
+              <div className="asset-sidebar-list">
                 {assets.map((asset) => (
-                  <div key={asset.id} className="asset-item" title={asset.prompt}>
+                  <div key={asset.id} className="asset-sidebar-item" title={asset.prompt}>
                     <img src={asset.url} alt="asset" />
-                    <div className="asset-item-actions">
+                    <div className="asset-sidebar-actions">
                       <button
                         onClick={() => {
-                          // 캔버스에 이미지 추가
                           const position = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 }
                           const newNode: Node = {
                             id: getNewNodeId(),
                             type: 'image',
                             position,
-                            data: { imageUrl: asset.url, label: asset.prompt.slice(0, 20) },
+                            data: { imageUrl: asset.url, label: asset.prompt?.slice(0, 20) || 'AI 생성' },
                             style: { width: 200, height: 200 },
                           }
                           setNodes(nds => [...nds, newNode])
                         }}
+                        title="캔버스에 추가"
                       >
-                        +추가
+                        +
                       </button>
                       <button
                         onClick={() => {
@@ -810,24 +746,32 @@ function WorkspaceCanvas() {
                           link.download = `asset-${asset.timestamp}.png`
                           link.click()
                         }}
+                        title="다운로드"
                       >
-                        ⬇️
+                        ⬇
                       </button>
                       <button
-                        onClick={() => {
-                          setAssets(prev => prev.filter(a => a.id !== asset.id))
-                        }}
+                        onClick={() => setAssets(prev => prev.filter(a => a.id !== asset.id))}
+                        title="삭제"
                       >
-                        🗑️
+                        ×
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+            {assets.length > 0 && (
+              <button
+                className="asset-clear-all"
+                onClick={() => setAssets([])}
+              >
+                전체 삭제
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
