@@ -171,32 +171,38 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   // ==================== 프롬프트 자동 생성 ====================
 
   const generatedPrompt = useMemo(() => {
-    const parts: string[] = []
-
-    // 베이스
-    parts.push(character.base.gender === '남성' ? 'male' : 'female')
-    parts.push(`${character.base.bodyType} build`)
-    parts.push(character.base.height)
-    parts.push(character.base.age)
-
-    // 얼굴
-    parts.push(`${character.face.style} face`)
-    parts.push(character.face.eyes)
-    parts.push(`${character.face.skinTone} skin`)
-
-    // 머리
-    parts.push(`${character.hair.color} ${character.hair.style} hair`)
-
-    // 의상
-    if (character.top.item) {
-      parts.push(`wearing ${character.top.item}`)
+    // 포즈/앵글 매핑 (한국어 → 영어)
+    const poseMap: { [key: string]: string } = {
+      '서있기': 'standing',
+      '앉기': 'sitting',
+      '달리기': 'running',
+      '점프': 'jumping',
+      '걷기': 'walking',
+      'T포즈': 'T-pose with arms extended horizontally',
+      'A포즈': 'A-pose with arms slightly away from body',
     }
-    if (character.bottom.item) {
-      parts.push(`and ${character.bottom.item}`)
+    const angleMap: { [key: string]: string } = {
+      '정면': 'front view',
+      '측면': 'side view',
+      '뒷면': 'back view',
+      '3/4': 'three-quarter view',
     }
-    if (character.shoes.item) {
-      parts.push(character.shoes.item)
+    const directionMap: { [key: string]: string } = {
+      '왼쪽 보기': 'looking left',
+      '정면 보기': 'looking straight ahead',
+      '오른쪽 보기': 'looking right',
     }
+
+    const gender = character.base.gender === '남성' ? 'male' : 'female'
+    const pose = poseMap[character.pose.pose] || character.pose.pose
+    const angle = angleMap[character.pose.angle] || character.pose.angle
+    const direction = directionMap[character.pose.direction] || ''
+
+    // 의상 조합
+    const outfit = []
+    if (character.top.item) outfit.push(character.top.item)
+    if (character.bottom.item) outfit.push(character.bottom.item)
+    if (character.shoes.item) outfit.push(character.shoes.item)
 
     // 악세서리
     const accessories = []
@@ -204,25 +210,28 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     if (character.accessory.neck !== '없음') accessories.push(character.accessory.neck)
     if (character.accessory.hands !== '없음') accessories.push(character.accessory.hands)
     if (character.accessory.other !== '없음') accessories.push(character.accessory.other)
-    if (accessories.length > 0) {
-      parts.push(`with ${accessories.join(', ')}`)
-    }
 
     // 무기
+    let weaponDesc = ''
     if (character.weapon.category !== '없음' && character.weapon.item) {
-      parts.push(`holding ${character.weapon.item} in ${character.weapon.position}`)
+      weaponDesc = `holding ${character.weapon.item}`
     }
 
-    // 포즈
-    parts.push(`${character.pose.pose} pose`)
-    parts.push(`${character.pose.angle} view`)
-    parts.push(`looking ${character.pose.direction}`)
+    // 구조화된 프롬프트 생성
+    const prompt = `A single ${gender} character, full body shot, ${angle}, ${pose}${direction ? ', ' + direction : ''}.
 
-    // 스타일 + 흰색 배경 (배경 제거를 위해)
-    parts.push('webtoon style', 'clean lines', 'high quality', 'detailed')
-    parts.push('pure white background', 'solid white background', 'isolated character on white')
+Character details:
+- Age: ${character.base.age}
+- Body: ${character.base.bodyType} build, ${character.base.height}
+- Face: ${character.face.style} face with ${character.face.eyes}, ${character.face.skinTone} skin tone
+- Hair: ${character.hair.color} ${character.hair.style} hair
+- Outfit: ${outfit.length > 0 ? outfit.join(', ') : 'casual clothes'}${accessories.length > 0 ? ', with ' + accessories.join(', ') : ''}${weaponDesc ? ', ' + weaponDesc : ''}
 
-    return parts.join(', ')
+Style: Korean webtoon style, clean bold outlines, cel-shaded coloring, consistent character design.
+Background: Pure solid white background (#FFFFFF), no shadows, no floor, character isolated on white.
+Composition: Single character only, centered, no multiple views, no turnaround sheet.`
+
+    return prompt
   }, [character])
 
   // ==================== 카테고리별 업데이트 함수 ====================
