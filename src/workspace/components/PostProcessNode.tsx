@@ -18,43 +18,103 @@ const removeWhiteBackground = (imageData: ImageData, threshold: number = 240): I
 }
 
 // 원본(흰배경)과 변환된(검정배경) 이미지를 비교해서 배경만 투명하게
-// 핵심: 원본에서 흰색이었고 + 변환 후 검정색 = 배경 영역
+// 핵심: 원본에서 밝았고 + 변환 후 어두우면 = 배경 영역
 const removeBackgroundByComparison = (
   originalData: ImageData,  // 흰 배경 원본
   blackBgData: ImageData,   // 검정 배경 변환본
-  whiteThreshold: number = 240,
-  blackThreshold: number = 30
+  whiteThreshold: number = 200,  // 더 낮춰서 밝은 회색도 포함
+  blackThreshold: number = 50    // 더 높여서 어두운 회색도 포함
 ): ImageData => {
+  const width = originalData.width
+  const height = originalData.height
   const origPixels = originalData.data
   const blackPixels = blackBgData.data
-  const result = new Uint8ClampedArray(blackPixels)
+
+  // 1단계: 배경 마스크 생성 (1 = 배경, 0 = 캐릭터)
+  const mask = new Uint8Array(width * height)
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+
+      const origR = origPixels[i]
+      const origG = origPixels[i + 1]
+      const origB = origPixels[i + 2]
+      const origBrightness = (origR + origG + origB) / 3
+
+      const blackR = blackPixels[i]
+      const blackG = blackPixels[i + 1]
+      const blackB = blackPixels[i + 2]
+      const blackBrightness = (blackR + blackG + blackB) / 3
+
+      // 원본에서 밝았고, 변환 후 어두워졌으면 = 배경
+      // 밝기 차이도 고려 (배경은 큰 변화, 캐릭터는 작은 변화)
+      const brightnessDiff = origBrightness - blackBrightness
+      const isBackground =
+        origBrightness > whiteThreshold &&
+        blackBrightness < blackThreshold &&
+        brightnessDiff > 100  // 밝기가 크게 변한 부분만
+
+      mask[y * width + x] = isBackground ? 1 : 0
+    }
+  }
+
+  // 2단계: 배경 마스크 확장 (Dilation) - 경계 잔여물 제거
+  // 주변 픽셀 중 하나라도 배경이면 배경으로 처리
+  const expandedMask = new Uint8Array(mask)
+  const dilationRadius = 2  // 2픽셀 확장
+
+  for (let y = dilationRadius; y < height - dilationRadius; y++) {
+    for (let x = dilationRadius; x < width - dilationRadius; x++) {
+      const idx = y * width + x
+      if (mask[idx] === 0) {
+        // 캐릭터 픽셀인데, 주변에 배경이 많으면 배경으로 처리
+        let bgCount = 0
+        let totalCount = 0
+
+        for (let dy = -dilationRadius; dy <= dilationRadius; dy++) {
+          for (let dx = -dilationRadius; dx <= dilationRadius; dx++) {
+            const nIdx = (y + dy) * width + (x + dx)
+            if (mask[nIdx] === 1) bgCount++
+            totalCount++
+          }
+        }
+
+        // 주변의 60% 이상이 배경이면 이 픽셀도 배경으로
+        if (bgCount > totalCount * 0.6) {
+          // 추가로 이 픽셀이 밝은 색인지 확인 (실제 캐릭터가 아닌 잔여물)
+          const i = idx * 4
+          const brightness = (origPixels[i] + origPixels[i + 1] + origPixels[i + 2]) / 3
+          if (brightness > 180) {  // 밝은 픽셀만 확장 대상
+            expandedMask[idx] = 1
+          }
+        }
+      }
+    }
+  }
+
+  // 3단계: 결과 이미지 생성
+  const result = new Uint8ClampedArray(origPixels.length)
 
   for (let i = 0; i < origPixels.length; i += 4) {
-    const origR = origPixels[i]
-    const origG = origPixels[i + 1]
-    const origB = origPixels[i + 2]
+    const maskIdx = i / 4
 
-    const blackR = blackPixels[i]
-    const blackG = blackPixels[i + 1]
-    const blackB = blackPixels[i + 2]
-
-    // 원본에서 흰색에 가까웠고, 변환 후 검정색에 가까우면 = 배경
-    const wasWhite = origR > whiteThreshold && origG > whiteThreshold && origB > whiteThreshold
-    const isNowBlack = blackR < blackThreshold && blackG < blackThreshold && blackB < blackThreshold
-
-    if (wasWhite && isNowBlack) {
+    if (expandedMask[maskIdx] === 1) {
       // 배경이므로 투명하게
+      result[i] = 0
+      result[i + 1] = 0
+      result[i + 2] = 0
       result[i + 3] = 0
     } else {
       // 캐릭터 영역: 원본 색상 유지
-      result[i] = origR
-      result[i + 1] = origG
-      result[i + 2] = origB
+      result[i] = origPixels[i]
+      result[i + 1] = origPixels[i + 1]
+      result[i + 2] = origPixels[i + 2]
       result[i + 3] = 255
     }
   }
 
-  return new ImageData(result, originalData.width, originalData.height)
+  return new ImageData(result, width, height)
 }
 
 // 어셋 라이브러리 이벤트
@@ -250,8 +310,9 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
                   const blackBgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
 
                   // 강도에 따른 임계값 조정
-                  const whiteThreshold = Math.round(200 + intensity * 55)  // 200~255
-                  const blackThreshold = Math.round(10 + (1 - intensity) * 40)  // 10~50
+                  // intensity 높을수록: 더 공격적으로 배경 제거 (임계값 낮춤)
+                  const whiteThreshold = Math.round(240 - intensity * 80)  // 160~240
+                  const blackThreshold = Math.round(20 + intensity * 60)   // 20~80
 
                   // 비교해서 배경만 투명하게
                   const processed = removeBackgroundByComparison(
