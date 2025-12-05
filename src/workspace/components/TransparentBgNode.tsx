@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
+import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
 import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, AspectRatio, ImageSize } from '../utils/geminiApi'
 
 /**
@@ -13,6 +13,7 @@ import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, AspectR
 
 interface TransparentBgNodeData {
   apiKey?: string
+  connectedImage?: string
 }
 
 // 해상도 옵션
@@ -36,11 +37,14 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number })
 
 export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentBgNodeData>) {
   const { setNodes } = useReactFlow()
+  const edges = useStore((state) => state.edges) || []
+  const nodes = useStore((state) => state.getNodes()) || []
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [apiKey, setApiKey] = useState(data.apiKey || '')
   const [showApiKey, setShowApiKey] = useState(false)
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [connectedImage, setConnectedImage] = useState<string | null>(data.connectedImage || null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [transparentImage, setTransparentImage] = useState<string | null>(null)
@@ -56,6 +60,33 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, apiKey } } : n))
     )
   }, [apiKey, id, setNodes])
+
+  // 연결된 이미지 노드에서 이미지 가져오기
+  useEffect(() => {
+    if (!Array.isArray(edges) || !Array.isArray(nodes)) return
+
+    const incomingEdge = edges.find(
+      (edge) => edge.target === id && edge.targetHandle === 'image-in'
+    )
+
+    if (incomingEdge) {
+      const sourceNode = nodes.find((n) => n.id === incomingEdge.source)
+      if (sourceNode) {
+        const imageUrl = sourceNode.data?.imageUrl ||
+                        sourceNode.data?.url ||
+                        sourceNode.data?.resultImage ||
+                        sourceNode.data?.generatedImage
+        if (imageUrl) {
+          setConnectedImage(imageUrl)
+          setNodes((nds) =>
+            nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, connectedImage: imageUrl } } : n))
+          )
+        }
+      }
+    } else {
+      setConnectedImage(null)
+    }
+  }, [edges, nodes, id, setNodes])
 
   // 파일 업로드 처리
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,6 +121,9 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     }
   }
 
+  // 사용할 이미지 (연결된 이미지 우선, 없으면 업로드 이미지)
+  const sourceImage = connectedImage || uploadedImage
+
   /**
    * 투명 배경 처리 (차이 매트 방식)
    */
@@ -98,8 +132,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       setStatusText('⚠️ API 키를 입력하세요')
       return
     }
-    if (!uploadedImage) {
-      setStatusText('⚠️ 이미지를 업로드하세요')
+    if (!sourceImage) {
+      setStatusText('⚠️ 이미지를 연결하거나 업로드하세요')
       return
     }
 
@@ -109,8 +143,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     setStatusText('🎭 배경 투명화 처리 중...')
 
     try {
-      const base64Data = uploadedImage.split(',')[1]
-      const mimeType = uploadedImage.split(';')[0].split(':')[1]
+      const base64Data = sourceImage.split(',')[1]
+      const mimeType = sourceImage.split(';')[0].split(':')[1] || 'image/png'
       const model = MODELS[0].id
 
       // 1단계: 흰배경으로 변환
@@ -312,58 +346,62 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
           </div>
         </div>
 
-        {/* 이미지 업로드 영역 */}
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          style={{
-            border: '2px dashed #667eea',
-            borderRadius: 6,
-            padding: 12,
-            textAlign: 'center',
-            cursor: 'pointer',
-            marginBottom: 12,
-            background: uploadedImage ? 'transparent' : '#2a2a3e',
-            minHeight: 80,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-          }}
-        >
-          {uploadedImage ? (
-            <img
-              src={uploadedImage}
-              alt="uploaded"
-              style={{
-                maxWidth: '100%',
-                maxHeight: 100,
-                borderRadius: 4,
-                objectFit: 'contain',
-              }}
-            />
-          ) : (
-            <div>
-              <div style={{ fontSize: 24, marginBottom: 4 }}>📁</div>
-              <div style={{ fontSize: 10, color: '#888' }}>
-                클릭 또는 드래그하여 업로드
+        {/* 이미지 입력 영역 */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: '#667eea', marginBottom: 4, fontWeight: 'bold' }}>
+            🖼️ 원본 이미지 {connectedImage ? '(노드 연결됨)' : '(연결 또는 업로드)'}
+          </div>
+          <div
+            onClick={() => !connectedImage && fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            style={{
+              border: `2px dashed ${connectedImage ? '#10b981' : '#667eea'}`,
+              borderRadius: 6,
+              padding: 12,
+              textAlign: 'center',
+              cursor: connectedImage ? 'default' : 'pointer',
+              background: sourceImage ? 'transparent' : '#2a2a3e',
+              minHeight: 80,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            {sourceImage ? (
+              <img
+                src={sourceImage}
+                alt="source"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: 100,
+                  borderRadius: 4,
+                  objectFit: 'contain',
+                }}
+              />
+            ) : (
+              <div>
+                <div style={{ fontSize: 24, marginBottom: 4 }}>📁</div>
+                <div style={{ fontSize: 10, color: '#888' }}>
+                  노드 연결 또는 클릭하여 업로드
+                </div>
               </div>
-            </div>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileUpload}
-            style={{ display: 'none' }}
-          />
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+            />
+          </div>
         </div>
 
         {/* 처리 버튼 */}
         <button
           onClick={handleProcess}
-          disabled={isProcessing || !apiKey || !uploadedImage}
+          disabled={isProcessing || !apiKey || !sourceImage}
           style={{
             width: '100%',
             padding: '10px',
@@ -479,8 +517,28 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
         )}
       </div>
 
-      <Handle type="target" position={Position.Left} id="in" />
-      <Handle type="source" position={Position.Right} id="out" />
+      {/* 핸들 - 이미지 입력 (왼쪽) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="image-in"
+        style={{
+          background: '#667eea',
+          width: 12,
+          height: 12,
+        }}
+      />
+      {/* 핸들 - 결과 출력 (오른쪽) */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="out"
+        style={{
+          background: '#00d4ff',
+          width: 12,
+          height: 12,
+        }}
+      />
     </div>
   )
 }

@@ -21,8 +21,10 @@ export function ImageNode({ data, selected, id }: NodeProps<ImageNodeData>) {
   }
 
   return (
-    <div className={`image-node ${selected ? 'selected' : ''}`}>
-      <Handle type="target" position={Position.Left} id="image-in" />
+    <div
+      className={`image-node ${selected ? 'selected' : ''}`}
+      style={{ position: 'relative' }}
+    >
       <NodeResizer
         isVisible={selected}
         minWidth={100}
@@ -41,7 +43,32 @@ export function ImageNode({ data, selected, id }: NodeProps<ImageNodeData>) {
         />
       </div>
       <div className="image-label">{data.label}</div>
-      <Handle type="source" position={Position.Right} id="image-out" />
+      {/* 핸들 - 좌측 중앙 (입력) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="image-in"
+        style={{
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: '#3b82f6',
+          width: 10,
+          height: 10,
+        }}
+      />
+      {/* 핸들 - 우측 중앙 (출력) */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="image-out"
+        style={{
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: '#10b981',
+          width: 10,
+          height: 10,
+        }}
+      />
     </div>
   )
 }

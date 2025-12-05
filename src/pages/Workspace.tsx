@@ -231,10 +231,12 @@ function WorkspaceCanvas() {
         return
       }
 
+      // Ctrl+Z: 실행취소
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
       }
+      // Ctrl+Shift+Z 또는 Ctrl+Y: 다시실행
       if (
         ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') ||
         ((e.ctrlKey || e.metaKey) && e.key === 'y')
@@ -242,23 +244,51 @@ function WorkspaceCanvas() {
         e.preventDefault()
         redo()
       }
+      // Ctrl+C: 복사
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         e.preventDefault()
         copySelectedNodes()
       }
+      // Ctrl+V: 붙여넣기
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         e.preventDefault()
         pasteNodes()
       }
+      // Ctrl+A: 전체 선택
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault()
         setNodes((nds) => nds.map((n) => ({ ...n, selected: true })))
+      }
+      // Delete 또는 Backspace: 선택된 노드 삭제
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        const selectedNodeIds = nodes.filter(n => n.selected).map(n => n.id)
+        if (selectedNodeIds.length > 0) {
+          setNodes((nds) => nds.filter((n) => !n.selected))
+          setEdges((eds) => eds.filter((e) => !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)))
+        }
+      }
+      // Escape: 선택 해제
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setNodes((nds) => nds.map((n) => ({ ...n, selected: false })))
+        setShowAddPanel(false)
+      }
+      // L: 라이브러리 토글
+      if (e.key === 'l' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        setShowAssetLibrary((prev) => !prev)
+      }
+      // N: 노드 추가 패널 토글
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        setShowAddPanel((prev) => !prev)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes])
+  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes])
 
   // 노드/엣지 변경 시 히스토리 저장 (debounce)
   const lastSaveRef = useRef<string>('')
@@ -936,7 +966,7 @@ function WorkspaceCanvas() {
                     <div
                       key={asset.id}
                       className="asset-sidebar-item"
-                      title={asset.prompt}
+                      title={`${asset.prompt}\n드래그하여 캔버스에 추가`}
                       draggable
                       onDragStart={(e) => {
                         e.dataTransfer.setData('application/json', JSON.stringify({
@@ -949,22 +979,6 @@ function WorkspaceCanvas() {
                     >
                       <img src={asset.url} alt="asset" draggable={false} />
                       <div className="asset-sidebar-actions">
-                        <button
-                          onClick={() => {
-                            const position = { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 }
-                            const newNode: Node = {
-                              id: getNewNodeId(),
-                              type: 'image',
-                              position,
-                              data: { imageUrl: asset.url, label: asset.prompt?.slice(0, 20) || 'AI 생성', prompt: asset.prompt },
-                              style: { width: 200, height: 200 },
-                            }
-                            setNodes(nds => [...nds, newNode])
-                          }}
-                          title="캔버스에 추가"
-                        >
-                          +
-                        </button>
                         {/* 카테고리 변경 드롭다운 */}
                         <select
                           value={asset.category}
