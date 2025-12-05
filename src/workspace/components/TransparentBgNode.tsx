@@ -146,11 +146,13 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
         background: '#1a1a2e',
         borderRadius: 12,
         border: selected ? '2px solid #00d4ff' : '2px solid #333',
-        minWidth: 380,
+        width: 380,
+        minHeight: 450,
         color: 'white',
+        position: 'relative',
       }}
     >
-      <NodeResizer isVisible={selected} minWidth={380} minHeight={450} />
+      <NodeResizer isVisible={selected} minWidth={350} minHeight={400} />
 
       {/* 헤더 */}
       <div

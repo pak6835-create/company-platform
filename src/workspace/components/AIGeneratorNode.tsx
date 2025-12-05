@@ -171,7 +171,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     )
   }, [apiKey, model, generatedImages, id, setNodes])
 
-  // ==================== 프롬프트 자동 생성 (간소화) ====================
+  // ==================== 프롬프트 자동 생성 ====================
 
   const generatedPrompt = useMemo(() => {
     const gender = character.base.gender === '남성' ? 'male' : 'female'
@@ -189,12 +189,15 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       ? `holding ${character.weapon.item}`
       : ''
 
-    // 간단한 프롬프트 (해상도/종횡비는 API 옵션으로 전달)
-    return `Single ${gender} character, full body, standing, ${angle}, white background.
+    // 프롬프트 (캐릭터 1명 강조)
+    return `A single ${gender} character illustration. Only ONE person in the image.
+Full body shot from head to toe, ${angle}, standing pose.
 ${character.base.age}, ${character.base.bodyType} build, ${character.base.height}.
 ${character.hair.color} ${character.hair.style} hair, ${character.face.style} face.
-Wearing ${outfit || 'casual clothes'}${acc ? ', ' + acc : ''}${weapon ? ', ' + weapon : ''}.
-Korean webtoon style, clean lines, cel-shaded.`
+Wearing: ${outfit || 'casual clothes'}${acc ? ', ' + acc : ''}${weapon ? ', ' + weapon : ''}.
+Style: Korean webtoon, clean outlines, cel-shaded coloring.
+Background: solid white (#FFFFFF), no shadows, no other elements.
+Important: Draw exactly ONE character only, not multiple people.`
   }, [character])
 
   // ==================== 카테고리별 업데이트 함수 ====================
