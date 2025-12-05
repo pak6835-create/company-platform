@@ -6,11 +6,12 @@
  * import { generateImage, editImage, extractAlpha, MODELS } from '../utils/geminiApi'
  */
 
-// 사용 가능한 모델 목록
+// 사용 가능한 모델 목록 (공식 문서 기준)
+// https://ai.google.dev/gemini-api/docs/image-generation
 export const MODELS = [
   { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2.0 (안정)' },
-  { id: 'gemini-2.0-flash-exp-image-generation', name: '나노바나나 2.0 Exp' },
-  { id: 'imagen-3.0-generate-002', name: '나노바나나 3 Pro' },
+  { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 2.5 Flash' },
+  { id: 'gemini-3-pro-image-preview', name: '나노바나나 3 Pro' },
 ]
 
 // API 응답에서 이미지 base64 추출
