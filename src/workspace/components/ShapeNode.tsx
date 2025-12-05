@@ -7,8 +7,8 @@ export function ShapeNode({ data, selected }: NodeProps<ShapeNodeData>) {
       className={`shape-node shape-${data.shape} ${selected ? 'selected' : ''}`}
       style={{
         backgroundColor: data.backgroundColor || '#3b82f6',
-        width: data.width || 100,
-        height: data.height || 100,
+        width: '100%',
+        height: '100%',
       }}
     >
       <Handle type="target" position={Position.Left} id="shape-in" />

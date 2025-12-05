@@ -2,8 +2,19 @@ import { useState, useEffect, useRef } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS } from '../utils/geminiApi'
 
-// 기존 이미지를 투명 배경으로 변환하는 노드
-// AI를 사용하여 흰배경/검정배경 버전을 생성하고 비교하여 알파 추출
+/**
+ * 이미지 배경 투명화 노드
+ *
+ * 기술 원리 (Medium 기사 기반):
+ * 1단계: 이미지를 흰색(#FFFFFF) 배경으로 변환
+ * 2단계: 같은 이미지를 검정(#000000) 배경으로 변환 (순차 처리로 캐릭터 일관성 유지)
+ * 3단계: 두 이미지 픽셀 비교로 알파 채널 추출 (차이 매트 방식)
+ *
+ * 알파 계산 공식:
+ * - 완전 불투명 픽셀: 흰배경/검정배경에서 동일하게 보임 (거리 = 0)
+ * - 완전 투명 픽셀: 배경색과 동일하게 보임 (거리 = 최대)
+ * - alpha = 1 - (pixelDist / bgDist)
+ */
 
 interface TransparentBgNodeData {
   apiKey?: string
@@ -23,9 +34,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
-  const [whiteImage, setWhiteImage] = useState<string | null>(null)
-  const [blackImage, setBlackImage] = useState<string | null>(null)
   const [transparentImage, setTransparentImage] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0) // 0~100 진행률
 
   // API 키 저장
   useEffect(() => {
@@ -43,10 +53,9 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string
       setUploadedImage(dataUrl)
-      setWhiteImage(null)
-      setBlackImage(null)
       setTransparentImage(null)
       setStatusText('')
+      setProgress(0)
     }
     reader.readAsDataURL(file)
   }
@@ -60,16 +69,32 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string
         setUploadedImage(dataUrl)
-        setWhiteImage(null)
-        setBlackImage(null)
         setTransparentImage(null)
         setStatusText('')
+        setProgress(0)
       }
       reader.readAsDataURL(file)
     }
   }
 
-  // 투명 배경 처리 (순차 처리 방식 - 캐릭터 일관성 유지)
+  /**
+   * 이미지 크기 구하기
+   */
+  const getImageSize = (imageUrl: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve({ width: img.width, height: img.height })
+      img.onerror = () => reject(new Error('이미지 크기 확인 실패'))
+      img.src = imageUrl
+    })
+  }
+
+  /**
+   * 투명 배경 처리 (차이 매트 방식)
+   * 1. 흰배경으로 변환
+   * 2. 같은 크기로 검정배경 변환
+   * 3. 알파 추출
+   */
   const handleProcess = async () => {
     if (!apiKey) {
       setStatusText('⚠️ API 키를 입력하세요')
@@ -81,18 +106,18 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     }
 
     setIsProcessing(true)
-    setStatusText('1/3 흰배경으로 변환 중...')
-    setWhiteImage(null)
-    setBlackImage(null)
     setTransparentImage(null)
+    setProgress(0)
+    setStatusText('🎭 배경 투명화 처리 중...')
 
     try {
       // base64 추출
       const base64Data = uploadedImage.split(',')[1]
       const mimeType = uploadedImage.split(';')[0].split(':')[1]
-      const model = MODELS[0].id // 안정 모델 사용
+      const model = MODELS[0].id // 나노바나나 3 Pro
 
       // 1단계: 흰배경으로 변환
+      setProgress(10)
       const whiteResult = await editImage(
         apiKey,
         base64Data,
@@ -100,29 +125,37 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
         model,
         mimeType
       )
-      setWhiteImage(whiteResult.url)
+      setProgress(40)
 
-      // 2단계: 검정배경으로 변환 (순차 처리로 캐릭터 일관성 유지)
-      setStatusText('2/3 검정배경으로 변환 중...')
+      // 흰배경 이미지 크기 확인
+      const whiteSize = await getImageSize(whiteResult.url)
+      console.log(`[TransparentBgNode] 흰배경 이미지 크기: ${whiteSize.width}x${whiteSize.height}`)
+
+      // 2단계: 검정배경으로 변환 (같은 크기 유지 요청)
       const blackResult = await editImage(
         apiKey,
         whiteResult.base64,
-        'Change ONLY the background color from white to pure black #000000. Do NOT modify, redraw, or change the subject in any way. Keep the exact same subject, pose, and details. Only replace the white background with black.',
+        `Change ONLY the background color from white to pure black #000000. Keep the exact same image size (${whiteSize.width}x${whiteSize.height}). Do NOT modify, redraw, or change the subject in any way. Keep the exact same subject, pose, and details. Only replace the white background with black.`,
         model
       )
-      setBlackImage(blackResult.url)
+      setProgress(75)
 
-      // 3단계: 알파 추출 (공통 유틸리티 사용)
-      setStatusText('3/3 투명 배경 생성 중...')
+      // 3단계: 알파 추출 (차이 매트 알고리즘)
       const [whiteData, blackData] = await Promise.all([
         loadImageData(whiteResult.url),
         loadImageData(blackResult.url),
       ])
 
+      // 크기 로그
+      console.log(`[TransparentBgNode] 흰배경 로드: ${whiteData.width}x${whiteData.height}`)
+      console.log(`[TransparentBgNode] 검정배경 로드: ${blackData.width}x${blackData.height}`)
+
+      setProgress(90)
       const resultData = extractAlpha(whiteData, blackData)
       const transparentUrl = imageDataToUrl(resultData)
 
       setTransparentImage(transparentUrl)
+      setProgress(100)
       setStatusText('✅ 완료!')
 
       // 어셋에 추가
@@ -146,7 +179,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
         background: '#1a1a2e',
         borderRadius: 12,
         border: selected ? '2px solid #00d4ff' : '2px solid #333',
-        width: 380,
+        width: '100%',
+        height: '100%',
         minHeight: 450,
         color: 'white',
         position: 'relative',
@@ -268,8 +302,39 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
           {isProcessing ? '⏳ 처리 중...' : '🎭 배경 투명화'}
         </button>
 
-        {/* 상태 */}
-        {statusText && (
+        {/* 로딩 프로그레스바 */}
+        {isProcessing && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: 11,
+              color: '#aaa',
+              marginBottom: 6,
+            }}>
+              <span>{statusText}</span>
+              <span>{progress}%</span>
+            </div>
+            <div style={{
+              width: '100%',
+              height: 8,
+              background: '#2a2a3e',
+              borderRadius: 4,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                width: `${progress}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #667eea 0%, #764ba2 50%, #00d4ff 100%)',
+                borderRadius: 4,
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+          </div>
+        )}
+
+        {/* 완료/에러 상태 */}
+        {!isProcessing && statusText && (
           <div
             style={{
               padding: '8px 12px',
@@ -284,71 +349,42 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
           </div>
         )}
 
-        {/* 결과 이미지들 */}
-        {(whiteImage || blackImage || transparentImage) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* 중간 과정 (작게) */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              {whiteImage && (
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>흰배경</div>
-                  <img
-                    src={whiteImage}
-                    alt="White BG"
-                    style={{ width: '100%', borderRadius: 4, border: '1px solid #333' }}
-                  />
-                </div>
-              )}
-              {blackImage && (
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>검정배경</div>
-                  <img
-                    src={blackImage}
-                    alt="Black BG"
-                    style={{ width: '100%', borderRadius: 4, border: '1px solid #333' }}
-                  />
-                </div>
-              )}
+        {/* 최종 결과만 표시 */}
+        {transparentImage && (
+          <div>
+            <div style={{ fontSize: 12, color: '#00d4ff', marginBottom: 4, fontWeight: 'bold' }}>
+              ✨ 결과 (투명 배경)
             </div>
-
-            {/* 최종 결과 */}
-            {transparentImage && (
-              <div>
-                <div style={{ fontSize: 12, color: '#00d4ff', marginBottom: 4, fontWeight: 'bold' }}>
-                  ✨ 결과 (투명 배경)
-                </div>
-                <img
-                  src={transparentImage}
-                  alt="Transparent"
-                  style={{
-                    width: '100%',
-                    borderRadius: 8,
-                    background: 'repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px',
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    const link = document.createElement('a')
-                    link.href = transparentImage
-                    link.download = `transparent-${Date.now()}.png`
-                    link.click()
-                  }}
-                  style={{
-                    width: '100%',
-                    marginTop: 8,
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    border: 'none',
-                    background: '#00d4ff',
-                    color: '#000',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                  }}
-                >
-                  ⬇️ PNG 다운로드
-                </button>
-              </div>
-            )}
+            <img
+              src={transparentImage}
+              alt="Transparent"
+              style={{
+                width: '100%',
+                borderRadius: 8,
+                background: 'repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px',
+              }}
+            />
+            <button
+              onClick={() => {
+                const link = document.createElement('a')
+                link.href = transparentImage
+                link.download = `transparent-${Date.now()}.png`
+                link.click()
+              }}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: '8px 12px',
+                borderRadius: 6,
+                border: 'none',
+                background: '#00d4ff',
+                color: '#000',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+              }}
+            >
+              ⬇️ PNG 다운로드
+            </button>
           </div>
         )}
       </div>

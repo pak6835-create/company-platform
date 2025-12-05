@@ -286,16 +286,39 @@ function WorkspaceCanvas() {
     (event: React.DragEvent) => {
       event.preventDefault()
 
-      const nodeType = event.dataTransfer.getData('application/reactflow-type')
-      const nodeData = event.dataTransfer.getData('application/reactflow-data')
-
-      if (!nodeType || !reactFlowWrapper.current) return
+      if (!reactFlowWrapper.current) return
 
       const bounds = reactFlowWrapper.current.getBoundingClientRect()
       const position = reactFlowInstance.screenToFlowPosition({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       })
+
+      // 어셋 드래그앤드롭 처리
+      const assetData = event.dataTransfer.getData('application/json')
+      if (assetData) {
+        try {
+          const parsed = JSON.parse(assetData)
+          if (parsed.type === 'asset' && parsed.url) {
+            const newNode: Node = {
+              id: getNewNodeId(),
+              type: 'image',
+              position,
+              data: { imageUrl: parsed.url, label: parsed.prompt?.slice(0, 20) || 'AI 생성', prompt: parsed.prompt },
+              style: { width: 200, height: 200 },
+            }
+            setNodes((nds) => [...nds, newNode])
+            return
+          }
+        } catch (e) {
+          // JSON 파싱 실패시 일반 노드 드롭으로 처리
+        }
+      }
+
+      const nodeType = event.dataTransfer.getData('application/reactflow-type')
+      const nodeData = event.dataTransfer.getData('application/reactflow-data')
+
+      if (!nodeType) return
 
       let newNode: Node
 
@@ -310,7 +333,7 @@ function WorkspaceCanvas() {
                 addImageToCanvas(imageUrl, label)
               },
             },
-            style: { width: 650, height: 600 },
+            style: { width: 900, height: 700 },
           }
           break
         case 'note':
@@ -706,6 +729,61 @@ function WorkspaceCanvas() {
         </div>
         {showAssetLibrary && (
           <div className="asset-sidebar-content">
+            {/* 이미지 업로드 영역 */}
+            <div
+              className="asset-upload-zone"
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.add('dragging')
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove('dragging')
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.currentTarget.classList.remove('dragging')
+                const file = e.dataTransfer.files[0]
+                if (file && file.type.startsWith('image/')) {
+                  const reader = new FileReader()
+                  reader.onload = (event) => {
+                    const url = event.target?.result as string
+                    setAssets(prev => [{
+                      id: `asset-${Date.now()}`,
+                      url,
+                      prompt: '업로드된 이미지',
+                      timestamp: Date.now()
+                    }, ...prev].slice(0, 20))
+                  }
+                  reader.readAsDataURL(file)
+                }
+              }}
+              onClick={() => {
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = 'image/*'
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0]
+                  if (file) {
+                    const reader = new FileReader()
+                    reader.onload = (event) => {
+                      const url = event.target?.result as string
+                      setAssets(prev => [{
+                        id: `asset-${Date.now()}`,
+                        url,
+                        prompt: '업로드된 이미지',
+                        timestamp: Date.now()
+                      }, ...prev].slice(0, 20))
+                    }
+                    reader.readAsDataURL(file)
+                  }
+                }
+                input.click()
+              }}
+            >
+              <span>📁 이미지 업로드</span>
+              <span className="upload-hint">클릭 또는 드래그</span>
+            </div>
+
             {assets.length === 0 ? (
               <div className="asset-sidebar-empty">
                 <p>생성된 이미지가<br/>여기에 저장됩니다</p>
@@ -713,8 +791,21 @@ function WorkspaceCanvas() {
             ) : (
               <div className="asset-sidebar-list">
                 {assets.map((asset) => (
-                  <div key={asset.id} className="asset-sidebar-item" title={asset.prompt}>
-                    <img src={asset.url} alt="asset" />
+                  <div
+                    key={asset.id}
+                    className="asset-sidebar-item"
+                    title={asset.prompt}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/json', JSON.stringify({
+                        type: 'asset',
+                        url: asset.url,
+                        prompt: asset.prompt
+                      }))
+                      e.dataTransfer.effectAllowed = 'copy'
+                    }}
+                  >
+                    <img src={asset.url} alt="asset" draggable={false} />
                     <div className="asset-sidebar-actions">
                       <button
                         onClick={() => {
@@ -723,7 +814,7 @@ function WorkspaceCanvas() {
                             id: getNewNodeId(),
                             type: 'image',
                             position,
-                            data: { imageUrl: asset.url, label: asset.prompt?.slice(0, 20) || 'AI 생성' },
+                            data: { imageUrl: asset.url, label: asset.prompt?.slice(0, 20) || 'AI 생성', prompt: asset.prompt },
                             style: { width: 200, height: 200 },
                           }
                           setNodes(nds => [...nds, newNode])
@@ -731,6 +822,15 @@ function WorkspaceCanvas() {
                         title="캔버스에 추가"
                       >
                         +
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(asset.prompt || '')
+                          alert('프롬프트가 복사되었습니다!')
+                        }}
+                        title="프롬프트 복사"
+                      >
+                        📋
                       </button>
                       <button
                         onClick={() => {

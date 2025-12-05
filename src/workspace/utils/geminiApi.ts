@@ -6,11 +6,9 @@
  * import { generateImage, editImage, extractAlpha, MODELS, IMAGE_SIZES, ASPECT_RATIOS } from '../utils/geminiApi'
  */
 
-// 사용 가능한 모델 목록 (공식 문서 기준)
+// 사용 가능한 모델 목록 (나노바나나 3 Pro만 사용)
 // https://ai.google.dev/gemini-api/docs/image-generation
 export const MODELS = [
-  { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2.0 (안정)' },
-  { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 2.5 Flash' },
   { id: 'gemini-3-pro-image-preview', name: '나노바나나 3 Pro' },
 ]
 
@@ -157,14 +155,43 @@ export async function editImage(
 }
 
 /**
+ * 이미지 데이터를 특정 크기로 리사이즈
+ */
+function resizeImageData(imageData: ImageData, targetWidth: number, targetHeight: number): ImageData {
+  // 원본 캔버스
+  const srcCanvas = document.createElement('canvas')
+  srcCanvas.width = imageData.width
+  srcCanvas.height = imageData.height
+  const srcCtx = srcCanvas.getContext('2d')!
+  srcCtx.putImageData(imageData, 0, 0)
+
+  // 타겟 캔버스
+  const dstCanvas = document.createElement('canvas')
+  dstCanvas.width = targetWidth
+  dstCanvas.height = targetHeight
+  const dstCtx = dstCanvas.getContext('2d')!
+  dstCtx.drawImage(srcCanvas, 0, 0, targetWidth, targetHeight)
+
+  return dstCtx.getImageData(0, 0, targetWidth, targetHeight)
+}
+
+/**
  * 두 이미지(흰배경/검정배경)를 비교하여 알파 채널 추출
  * Medium 기사 방식: https://jidefr.medium.com/generating-transparent-background-images-with-nano-banana-pro-2
  */
 export function extractAlpha(whiteImageData: ImageData, blackImageData: ImageData): ImageData {
+  // 이미지 크기가 다르면 검정배경 이미지를 흰배경 크기로 리사이즈
+  let blackData = blackImageData
+  if (whiteImageData.width !== blackImageData.width || whiteImageData.height !== blackImageData.height) {
+    console.warn(`[extractAlpha] 이미지 크기 불일치! 흰배경: ${whiteImageData.width}x${whiteImageData.height}, 검정배경: ${blackImageData.width}x${blackImageData.height}`)
+    console.log('[extractAlpha] 검정배경 이미지를 흰배경 크기로 리사이즈합니다.')
+    blackData = resizeImageData(blackImageData, whiteImageData.width, whiteImageData.height)
+  }
+
   const width = whiteImageData.width
   const height = whiteImageData.height
   const whitePixels = whiteImageData.data
-  const blackPixels = blackImageData.data
+  const blackPixels = blackData.data
   const result = new Uint8ClampedArray(whitePixels.length)
 
   // 흰색(255,255,255)과 검은색(0,0,0) 사이의 거리

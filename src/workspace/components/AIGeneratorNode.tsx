@@ -7,6 +7,8 @@ import type { ImageSize, AspectRatio } from '../utils/geminiApi'
 // ==================== 카테고리 및 옵션 데이터 ====================
 
 const CATEGORIES = [
+  { id: 'style', name: '스타일', icon: '🎨' },
+  { id: 'race', name: '종족', icon: '🧬' },
   { id: 'base', name: '베이스', icon: '👤' },
   { id: 'face', name: '얼굴', icon: '👦' },
   { id: 'hair', name: '머리카락', icon: '💇' },
@@ -19,66 +21,104 @@ const CATEGORIES = [
   { id: 'settings', name: '설정', icon: '⚙️' },
 ]
 
+// 스타일 옵션 (웹툰, 애니메이션 등)
+const STYLE_OPTIONS = [
+  { id: 'korean_webtoon', name: '한국 웹툰', desc: '깔끔한 선, 셀 셰이딩' },
+  { id: 'japanese_anime', name: '일본 애니메이션', desc: '큰 눈, 선명한 색상' },
+  { id: 'ghibli', name: '지브리 스타일', desc: '부드러운 색감, 자연스러운 분위기' },
+  { id: 'disney', name: '디즈니/픽사', desc: '3D 느낌의 2D, 생동감 있는 표정' },
+  { id: 'manhwa_action', name: '액션 만화', desc: '다이나믹, 강렬한 명암' },
+  { id: 'shoujo', name: '소녀만화', desc: '섬세한 선, 꽃/반짝임 효과' },
+  { id: 'chibi', name: '치비/SD', desc: '2~3등신, 귀여운 과장' },
+  { id: 'semi_realistic', name: '세미 리얼', desc: '사실적이지만 만화적 요소' },
+  { id: 'watercolor', name: '수채화', desc: '부드러운 색 번짐, 투명감' },
+  { id: 'flat_design', name: '플랫 디자인', desc: '단순화된 형태, 그래픽적' },
+]
+
+// 종족 옵션
+const RACE_OPTIONS = [
+  { id: 'human', name: '인간', features: '' },
+  { id: 'elf', name: '엘프', features: 'pointed elf ears, elegant features' },
+  { id: 'dark_elf', name: '다크엘프', features: 'pointed elf ears, dark skin, white hair' },
+  { id: 'dwarf', name: '드워프', features: 'short and stocky build, thick beard' },
+  { id: 'orc', name: '오크', features: 'green skin, tusks, muscular build' },
+  { id: 'vampire', name: '뱀파이어', features: 'pale skin, red eyes, fangs' },
+  { id: 'demon', name: '악마', features: 'horns, red or dark skin, demonic features' },
+  { id: 'angel', name: '천사', features: 'white wings, glowing halo, divine aura' },
+  { id: 'beastkin_cat', name: '수인(고양이)', features: 'cat ears, cat tail, slit pupils' },
+  { id: 'beastkin_wolf', name: '수인(늑대)', features: 'wolf ears, wolf tail, sharp canines' },
+  { id: 'beastkin_fox', name: '수인(여우)', features: 'fox ears, fluffy fox tail' },
+  { id: 'beastkin_rabbit', name: '수인(토끼)', features: 'long rabbit ears, fluffy tail' },
+  { id: 'dragon_hybrid', name: '용인', features: 'dragon horns, dragon tail, scales on skin' },
+  { id: 'fairy', name: '요정', features: 'small wings, glowing aura, delicate features' },
+  { id: 'robot', name: '로봇/안드로이드', features: 'mechanical parts, glowing eyes, metallic skin' },
+]
+
 const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, string[]>>> = {
   base: {
-    gender: ['남성', '여성'],
-    bodyType: ['마름', '보통', '건장', '근육질', '통통'],
-    height: ['5등신', '6등신', '7등신', '8등신'],
-    age: ['10대', '20대', '30대', '40대+'],
+    gender: ['남성', '여성', '중성'],
+    bodyType: ['마름', '보통', '건장', '근육질', '통통', '글래머'],
+    height: ['3등신', '5등신', '6등신', '7등신', '8등신'],
+    age: ['어린이', '10대', '20대', '30대', '40대+', '노인'],
   },
   face: {
-    style: ['날카로운', '부드러운', '귀여운', '강인한', '차가운', '따뜻한', '신비로운'],
-    eyes: ['큰 눈', '작은 눈', '날카로운 눈', '처진 눈', '올라간 눈'],
-    skinTone: ['밝은', '보통', '어두운', '창백한'],
+    style: ['날카로운', '부드러운', '귀여운', '강인한', '차가운', '따뜻한', '신비로운', '무표정', '장난기'],
+    eyes: ['큰 눈', '작은 눈', '날카로운 눈', '처진 눈', '올라간 눈', '반짝이는 눈', '무기력한 눈'],
+    skinTone: ['밝은', '보통', '어두운', '창백한', '황금빛', '올리브'],
+    expression: ['무표정', '미소', '웃음', '진지', '화남', '슬픔', '놀람'],
   },
   hair: {
-    style: ['단발', '중발', '장발', '묶음머리', '올림머리', '대머리'],
-    color: ['검정', '갈색', '금발', '빨강', '파랑', '은색', '분홍', '초록'],
+    style: ['짧은 머리', '단발', '중발', '장발', '포니테일', '트윈테일', '땋은머리', '올림머리', '덮은머리', '대머리', '스파이키'],
+    color: ['검정', '갈색', '금발', '빨강', '파랑', '은색', '분홍', '초록', '보라', '흰색', '그라데이션'],
+    texture: ['직모', '웨이브', '곱슬', '뻣뻣한'],
   },
   top: {
-    category: ['일상', '정장', '전투', '판타지', '학교', '전통'],
+    category: ['일상', '정장', '전투', '판타지', '학교', '전통', 'SF'],
     items: {
-      '일상': ['티셔츠', '셔츠', '후드티', '니트', '자켓'],
-      '정장': ['정장 상의', '조끼', '블라우스'],
-      '전투': ['전투복', '갑옷', '가죽 아머', '검은 코트'],
-      '판타지': ['로브', '망토', '마법사 복'],
-      '학교': ['교복 상의', '체육복'],
-      '전통': ['한복 저고리', '기모노'],
+      '일상': ['티셔츠', '셔츠', '후드티', '니트', '자켓', '크롭탑', '탱크탑'],
+      '정장': ['정장 상의', '조끼', '블라우스', '턱시도'],
+      '전투': ['전투복', '갑옷', '가죽 아머', '검은 코트', '군복'],
+      '판타지': ['로브', '망토', '마법사 복', '성직자복', '기사갑옷'],
+      '학교': ['교복 상의', '체육복', '세일러복'],
+      '전통': ['한복 저고리', '기모노', '치파오', '사리'],
+      'SF': ['우주복', '사이버 아머', '홀로그램 슈트'],
     },
   },
   bottom: {
-    category: ['일상', '정장', '전투', '판타지', '학교', '전통'],
+    category: ['일상', '정장', '전투', '판타지', '학교', '전통', 'SF'],
     items: {
-      '일상': ['청바지', '면바지', '반바지', '치마', '레깅스'],
-      '정장': ['정장 바지', '정장 치마'],
-      '전투': ['전투 바지', '갑옷 하의'],
-      '판타지': ['로브 하의', '판타지 치마'],
-      '학교': ['교복 바지', '교복 치마'],
-      '전통': ['한복 치마', '한복 바지'],
+      '일상': ['청바지', '면바지', '반바지', '치마', '레깅스', '조거팬츠'],
+      '정장': ['정장 바지', '정장 치마', '슬랙스'],
+      '전투': ['전투 바지', '갑옷 하의', '군용 바지'],
+      '판타지': ['로브 하의', '판타지 치마', '기사 하의'],
+      '학교': ['교복 바지', '교복 치마', '플리츠 스커트'],
+      '전통': ['한복 치마', '한복 바지', '하카마'],
+      'SF': ['우주복 하의', '사이버 레깅스', '홀로그램 팬츠'],
     },
   },
   shoes: {
-    item: ['운동화', '구두', '부츠', '샌들', '슬리퍼', '맨발', '전투화', '하이힐'],
+    item: ['운동화', '구두', '부츠', '샌들', '슬리퍼', '맨발', '전투화', '하이힐', '로퍼', '사이버 부츠'],
   },
   accessory: {
-    head: ['없음', '모자', '왕관', '머리띠', '안경', '선글라스', '귀걸이'],
-    neck: ['없음', '목걸이', '스카프', '넥타이', '초커'],
-    hands: ['없음', '반지', '장갑', '팔찌', '시계'],
-    other: ['없음', '가방', '배낭', '날개', '꼬리'],
+    head: ['없음', '모자', '왕관', '머리띠', '안경', '선글라스', '귀걸이', '헤드셋', '후드', '베레모', '리본'],
+    neck: ['없음', '목걸이', '스카프', '넥타이', '초커', '보타이', '망토'],
+    hands: ['없음', '반지', '장갑', '팔찌', '시계', '건틀릿', '붕대'],
+    other: ['없음', '가방', '배낭', '날개', '꼬리', '벨트', '어깨보호대', '홀스터'],
   },
   weapon: {
-    category: ['없음', '검/도', '창/봉', '활/총', '마법', '기타'],
+    category: ['없음', '검/도', '창/봉', '활/총', '마법', '현대무기', '기타'],
     items: {
-      '검/도': ['장검', '단검', '대검', '이도류', '카타나'],
-      '창/봉': ['창', '봉', '삼지창', '할버드'],
-      '활/총': ['활', '석궁', '권총', '라이플'],
-      '마법': ['지팡이', '마법봉', '오브', '마법책'],
-      '기타': ['방패', '도끼', '낫', '채찍'],
+      '검/도': ['장검', '단검', '대검', '이도류', '카타나', '레이피어', '세이버'],
+      '창/봉': ['창', '봉', '삼지창', '할버드', '낫창'],
+      '활/총': ['활', '석궁', '권총', '라이플', '기관총'],
+      '마법': ['지팡이', '마법봉', '오브', '마법책', '룬문양'],
+      '현대무기': ['권총', '소총', '샷건', 'SMG', '스나이퍼'],
+      '기타': ['방패', '도끼', '낫', '채찍', '해머', '너클'],
     },
     position: ['오른손', '왼손', '양손', '등에', '허리에'],
   },
   pose: {
-    angle: ['정면', '측면', '후면'],  // 간소화: 기본 스탠딩 포즈, 앵글만 선택
+    angle: ['정면', '측면', '후면', '3/4 앵글'],
   },
 }
 
@@ -100,15 +140,17 @@ const ASPECT_RATIO_OPTIONS = [
 
 // 기본 캐릭터 데이터
 const DEFAULT_CHARACTER = {
+  style: { artStyle: 'korean_webtoon' },
+  race: { type: 'human' },
   base: { gender: '남성', bodyType: '보통', height: '7등신', age: '20대' },
-  face: { style: '날카로운', eyes: '날카로운 눈', skinTone: '보통' },
-  hair: { style: '단발', color: '검정' },
+  face: { style: '날카로운', eyes: '날카로운 눈', skinTone: '보통', expression: '무표정' },
+  hair: { style: '단발', color: '검정', texture: '직모' },
   top: { category: '일상', item: '티셔츠' },
   bottom: { category: '일상', item: '청바지' },
   shoes: { item: '운동화' },
   accessory: { head: '없음', neck: '없음', hands: '없음', other: '없음' },
   weapon: { category: '없음', item: '', position: '오른손' },
-  pose: { angle: '정면' },  // 간소화: 스탠딩 포즈 고정, 앵글만 선택
+  pose: { angle: '정면' },
 }
 
 // 어셋 라이브러리 이벤트
@@ -140,6 +182,7 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [generationStatus, setGenerationStatus] = useState('')
   const [resolution, setResolution] = useState('2K') // 해상도 (대문자 K)
   const [aspectRatio, setAspectRatio] = useState('1:1') // 종횡비 (캐릭터는 정사각형 추천)
+  const [copied, setCopied] = useState(false) // 프롬프트 복사 상태
 
   // 노드 데이터 업데이트 (API 키와 모델만 저장 - 이미지는 메모리에만)
   useEffect(() => {
@@ -163,31 +206,110 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
 
   // ==================== 프롬프트 자동 생성 ====================
 
+  // 스타일별 프롬프트
+  const stylePrompts: Record<string, string> = {
+    korean_webtoon: 'Korean webtoon style, clean bold outlines, cel-shaded coloring, vibrant colors',
+    japanese_anime: 'Japanese anime style, big expressive eyes, detailed hair, vibrant saturated colors',
+    ghibli: 'Studio Ghibli style, soft watercolor-like colors, gentle lighting, whimsical atmosphere',
+    disney: 'Disney/Pixar style, 3D-like 2D rendering, expressive features, polished look',
+    manhwa_action: 'Action manhwa style, dynamic shading, sharp contrasts, intense dramatic lighting',
+    shoujo: 'Shoujo manga style, delicate linework, sparkles and flower effects, soft pastel colors',
+    chibi: 'Chibi/SD style, 2-3 head tall proportions, oversized head, cute exaggerated features',
+    semi_realistic: 'Semi-realistic style, detailed anatomy with stylized features, subtle shading',
+    watercolor: 'Watercolor illustration style, soft color bleeding, transparent layers, artistic texture',
+    flat_design: 'Flat design style, minimal shading, bold graphic shapes, limited color palette',
+  }
+
+  // 한국어 → 영어 변환 맵 (대폭 확장)
+  const translations: Record<string, Record<string, string>> = {
+    gender: { '남성': 'male', '여성': 'female', '중성': 'androgynous' },
+    bodyType: { '마름': 'slim', '보통': 'average', '건장': 'athletic', '근육질': 'muscular', '통통': 'chubby', '글래머': 'curvy' },
+    height: { '3등신': '3 head tall chibi', '5등신': '5 head tall', '6등신': '6 head tall', '7등신': '7 head tall', '8등신': '8 head tall realistic proportions' },
+    age: { '어린이': 'child', '10대': 'teenager', '20대': 'young adult in 20s', '30대': 'adult in 30s', '40대+': 'middle-aged', '노인': 'elderly' },
+    faceStyle: { '날카로운': 'sharp angular', '부드러운': 'soft gentle', '귀여운': 'cute round', '강인한': 'strong determined', '차가운': 'cold aloof', '따뜻한': 'warm friendly', '신비로운': 'mysterious ethereal', '무표정': 'stoic expressionless', '장난기': 'playful mischievous' },
+    eyes: { '큰 눈': 'large expressive eyes', '작은 눈': 'small narrow eyes', '날카로운 눈': 'sharp piercing eyes', '처진 눈': 'droopy gentle eyes', '올라간 눈': 'upturned fox eyes', '반짝이는 눈': 'sparkling bright eyes', '무기력한 눈': 'tired half-lidded eyes' },
+    skinTone: { '밝은': 'fair pale skin', '보통': 'medium skin tone', '어두운': 'dark skin', '창백한': 'very pale ghostly skin', '황금빛': 'golden tan skin', '올리브': 'olive skin tone' },
+    expression: { '무표정': 'neutral expression', '미소': 'gentle smile', '웃음': 'laughing happily', '진지': 'serious expression', '화남': 'angry scowling', '슬픔': 'sad melancholic', '놀람': 'surprised shocked' },
+    hairStyle: { '짧은 머리': 'very short hair', '단발': 'short bob hair', '중발': 'medium length hair', '장발': 'long flowing hair', '포니테일': 'ponytail', '트윈테일': 'twin tails pigtails', '땋은머리': 'braided hair', '올림머리': 'updo bun', '덮은머리': 'hair covering one eye', '대머리': 'bald', '스파이키': 'spiky messy hair' },
+    hairColor: { '검정': 'black', '갈색': 'brown', '금발': 'blonde golden', '빨강': 'red crimson', '파랑': 'blue', '은색': 'silver gray', '분홍': 'pink', '초록': 'green', '보라': 'purple violet', '흰색': 'white', '그라데이션': 'gradient ombre colored' },
+    hairTexture: { '직모': 'straight', '웨이브': 'wavy', '곱슬': 'curly', '뻣뻣한': 'stiff spiky' },
+    angle: { '정면': 'front view', '측면': 'side profile view', '후면': 'back view', '3/4 앵글': 'three-quarter view' },
+    // 의상 (확장)
+    top: { '티셔츠': 't-shirt', '셔츠': 'button-up shirt', '후드티': 'hoodie', '니트': 'knit sweater', '자켓': 'jacket', '크롭탑': 'crop top', '탱크탑': 'tank top', '정장 상의': 'suit jacket blazer', '조끼': 'vest', '블라우스': 'blouse', '턱시도': 'tuxedo', '전투복': 'tactical combat uniform', '갑옷': 'plate armor', '가죽 아머': 'leather armor', '검은 코트': 'long black coat', '군복': 'military uniform', '로브': 'wizard robe', '망토': 'hooded cape', '마법사 복': 'mage robes', '성직자복': 'priest robes', '기사갑옷': 'knight full armor', '교복 상의': 'school uniform blazer', '체육복': 'gym clothes', '세일러복': 'sailor uniform', '한복 저고리': 'hanbok jeogori', '기모노': 'japanese kimono', '치파오': 'chinese cheongsam', '사리': 'indian sari', '우주복': 'space suit', '사이버 아머': 'cyberpunk armor', '홀로그램 슈트': 'holographic bodysuit' },
+    bottom: { '청바지': 'blue jeans', '면바지': 'cotton pants', '반바지': 'shorts', '치마': 'skirt', '레깅스': 'leggings', '조거팬츠': 'jogger pants', '정장 바지': 'dress pants', '정장 치마': 'pencil skirt', '슬랙스': 'slacks', '전투 바지': 'tactical combat pants', '갑옷 하의': 'armored leg guards', '군용 바지': 'military cargo pants', '로브 하의': 'long robe skirt', '판타지 치마': 'fantasy layered skirt', '기사 하의': 'knight leg armor', '교복 바지': 'school uniform pants', '교복 치마': 'school uniform skirt', '플리츠 스커트': 'pleated skirt', '한복 치마': 'hanbok chima skirt', '한복 바지': 'hanbok baji pants', '하카마': 'japanese hakama', '우주복 하의': 'space suit pants', '사이버 레깅스': 'cyber leggings', '홀로그램 팬츠': 'holographic pants' },
+    shoes: { '운동화': 'sneakers', '구두': 'dress shoes', '부츠': 'boots', '샌들': 'sandals', '슬리퍼': 'slippers', '맨발': 'barefoot', '전투화': 'combat boots', '하이힐': 'high heels', '로퍼': 'loafers', '사이버 부츠': 'cyberpunk boots' },
+    accessory: { '없음': '', '모자': 'hat cap', '왕관': 'royal crown', '머리띠': 'headband', '안경': 'glasses', '선글라스': 'sunglasses', '귀걸이': 'earrings', '헤드셋': 'headset headphones', '후드': 'hood up', '베레모': 'beret', '리본': 'hair ribbon bow', '목걸이': 'necklace pendant', '스카프': 'scarf', '넥타이': 'necktie', '초커': 'choker collar', '보타이': 'bow tie', '망토': 'flowing cape', '반지': 'ring', '장갑': 'gloves', '팔찌': 'bracelet', '시계': 'wristwatch', '건틀릿': 'armored gauntlets', '붕대': 'wrapped bandages', '가방': 'shoulder bag', '배낭': 'backpack', '날개': 'wings', '꼬리': 'tail', '벨트': 'utility belt', '어깨보호대': 'shoulder pads pauldrons', '홀스터': 'weapon holster' },
+    weapon: { '장검': 'longsword', '단검': 'dagger', '대검': 'greatsword claymore', '이도류': 'dual wielding swords', '카타나': 'japanese katana', '레이피어': 'rapier', '세이버': 'saber', '창': 'spear lance', '봉': 'bo staff', '삼지창': 'trident', '할버드': 'halberd', '낫창': 'scythe polearm', '활': 'bow and arrow', '석궁': 'crossbow', '권총': 'pistol handgun', '라이플': 'rifle', '기관총': 'machine gun', '지팡이': 'magic staff', '마법봉': 'magic wand', '오브': 'magical orb', '마법책': 'spellbook grimoire', '룬문양': 'glowing runes', '소총': 'assault rifle', '샷건': 'shotgun', 'SMG': 'submachine gun', '스나이퍼': 'sniper rifle', '방패': 'shield', '도끼': 'battle axe', '낫': 'scythe', '채찍': 'whip', '해머': 'war hammer', '너클': 'brass knuckles' },
+  }
+
+  const t = (category: string, value: string): string => {
+    return translations[category]?.[value] || value
+  }
+
   const generatedPrompt = useMemo(() => {
-    const gender = character.base.gender === '남성' ? 'male' : 'female'
-    const angle = character.pose.angle === '정면' ? 'front view' : character.pose.angle === '측면' ? 'side view' : 'back view'
+    // 스타일 프롬프트
+    const artStyle = character.style?.artStyle || 'korean_webtoon'
+    const styleDesc = stylePrompts[artStyle] || stylePrompts.korean_webtoon
+
+    // 종족 특성
+    const raceType = character.race?.type || 'human'
+    const raceData = RACE_OPTIONS.find(r => r.id === raceType)
+    const raceFeatures = raceData?.features || ''
+
+    // 기본 속성
+    const gender = t('gender', character.base.gender)
+    const angle = t('angle', character.pose.angle)
+    const bodyType = t('bodyType', character.base.bodyType)
+    const height = t('height', character.base.height)
+    const age = t('age', character.base.age)
+
+    // 얼굴
+    const faceStyle = t('faceStyle', character.face.style)
+    const eyes = t('eyes', character.face.eyes)
+    const skinTone = t('skinTone', character.face.skinTone)
+    const expression = t('expression', character.face.expression || '무표정')
+
+    // 머리카락
+    const hairColor = t('hairColor', character.hair.color)
+    const hairStyle = t('hairStyle', character.hair.style)
+    const hairTexture = t('hairTexture', character.hair.texture || '직모')
 
     // 의상
-    const outfit = [character.top.item, character.bottom.item, character.shoes.item].filter(Boolean).join(', ')
+    const topItem = t('top', character.top.item)
+    const bottomItem = t('bottom', character.bottom.item)
+    const shoesItem = t('shoes', character.shoes.item)
+    const outfit = [topItem, bottomItem, shoesItem].filter(Boolean).join(', ')
 
     // 악세서리
-    const acc = [character.accessory.head, character.accessory.neck, character.accessory.hands, character.accessory.other]
-      .filter(a => a && a !== '없음').join(', ')
+    const accItems = [
+      t('accessory', character.accessory.head),
+      t('accessory', character.accessory.neck),
+      t('accessory', character.accessory.hands),
+      t('accessory', character.accessory.other),
+    ].filter(Boolean)
+    const acc = accItems.length > 0 ? accItems.join(', ') : ''
 
     // 무기
-    const weapon = character.weapon.category !== '없음' && character.weapon.item
-      ? `holding ${character.weapon.item}`
+    const weaponItem = character.weapon.category !== '없음' && character.weapon.item
+      ? `holding ${t('weapon', character.weapon.item)} in ${character.weapon.position === '양손' ? 'both hands' : character.weapon.position === '오른손' ? 'right hand' : character.weapon.position === '왼손' ? 'left hand' : character.weapon.position === '등에' ? 'on back' : 'at waist'}`
       : ''
 
-    // 프롬프트 (캐릭터 1명 강조)
-    return `A single ${gender} character illustration. Only ONE person in the image.
-Full body shot from head to toe, ${angle}, standing pose.
-${character.base.age}, ${character.base.bodyType} build, ${character.base.height}.
-${character.hair.color} ${character.hair.style} hair, ${character.face.style} face.
-Wearing: ${outfit || 'casual clothes'}${acc ? ', ' + acc : ''}${weapon ? ', ' + weapon : ''}.
-Style: Korean webtoon, clean outlines, cel-shaded coloring.
-Background: solid white (#FFFFFF), no shadows, no other elements.
-Important: Draw exactly ONE character only, not multiple people.`
+    // 디테일한 프롬프트 생성
+    return `A single ${gender} ${raceData?.name !== '인간' ? raceData?.name + ' ' : ''}character illustration on pure white #FFFFFF background.
+
+Character Details:
+- Full body shot from head to toe, ${angle}, standing pose
+- ${age}, ${bodyType} build, ${height}
+- ${faceStyle} face with ${eyes}, ${skinTone}, ${expression}
+${raceFeatures ? `- Race features: ${raceFeatures}` : ''}
+
+Hair: ${hairColor} ${hairTexture} ${hairStyle}
+
+Outfit: ${outfit || 'casual clothes'}${acc ? `\nAccessories: ${acc}` : ''}${weaponItem ? `\nWeapon: ${weaponItem}` : ''}
+
+Art Style: ${styleDesc}
+Background: solid pure white #FFFFFF, no shadows, no gradients, no other elements, clean isolated character.
+Important: Only ONE character, full body clearly visible, white background only.`
   }, [character])
 
   // ==================== 카테고리별 업데이트 함수 ====================
@@ -235,23 +357,24 @@ Important: Draw exactly ONE character only, not multiple people.`
         return
       }
 
-      // 2단계: 같은 이미지를 검정배경으로 편집
-      // 중요: 편집 시에는 안정적인 2.0 모델 사용 (3 Pro는 캐릭터 변형 심함)
+      // 2단계: 흰배경 이미지 크기 확인
+      const whiteData = await loadImageData(whiteResult.url)
+      const whiteSize = { width: whiteData.width, height: whiteData.height }
+      console.log(`[AIGeneratorNode] 흰배경 이미지 크기: ${whiteSize.width}x${whiteSize.height}`)
+
+      // 3단계: 같은 크기로 검정배경 편집
       setGenerationStatus('2/3 검정배경으로 변환 중...')
-      const stableModel = MODELS[0].id // gemini-2.0-flash (안정 모델)
       const blackResult = await editImage(
         apiKey,
         whiteResult.base64,
-        'Change ONLY the background color from white to pure black #000000. Do NOT modify, redraw, or change the character in any way. Keep the exact same character, pose, clothing, and details. Only replace the white background with black.',
-        stableModel
+        `Change ONLY the background color from white to pure black #000000. Keep the exact same image size (${whiteSize.width}x${whiteSize.height}). Do NOT modify, redraw, or change the character in any way. Keep the exact same character, pose, clothing, and details. Only replace the white background with black.`,
+        model
       )
 
-      // 3단계: 두 이미지 비교해서 알파 추출
+      // 4단계: 두 이미지 비교해서 알파 추출
       setGenerationStatus('3/3 투명 배경 생성 중...')
-      const [whiteData, blackData] = await Promise.all([
-        loadImageData(whiteResult.url),
-        loadImageData(blackResult.url),
-      ])
+      const blackData = await loadImageData(blackResult.url)
+      console.log(`[AIGeneratorNode] 검정배경 이미지 크기: ${blackData.width}x${blackData.height}`)
 
       const resultData = extractAlpha(whiteData, blackData)
       const transparentUrl = imageDataToUrl(resultData)
@@ -299,13 +422,9 @@ Important: Draw exactly ONE character only, not multiple people.`
           </div>
           <div className="setting-group">
             <label>AI 모델</label>
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+            <div style={{ padding: '8px 12px', background: '#f0f0f0', borderRadius: 6, fontSize: 13 }}>
+              🤖 {MODELS[0].name}
+            </div>
           </div>
           <div className="setting-group">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -365,6 +484,54 @@ Important: Draw exactly ONE character only, not multiple people.`
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">
               API 키 발급하기 →
             </a>
+          </div>
+        </div>
+      )
+    }
+
+    // 스타일 카테고리
+    if (cat === 'style') {
+      return (
+        <div className="char-settings-panel">
+          <h4>🎨 아트 스타일</h4>
+          <div className="style-grid">
+            {STYLE_OPTIONS.map((style) => (
+              <button
+                key={style.id}
+                className={`style-card ${character.style?.artStyle === style.id ? 'active' : ''}`}
+                onClick={() => setCharacter(prev => ({
+                  ...prev,
+                  style: { ...prev.style, artStyle: style.id }
+                }))}
+              >
+                <span className="style-name">{style.name}</span>
+                <span className="style-desc">{style.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    // 종족 카테고리
+    if (cat === 'race') {
+      return (
+        <div className="char-settings-panel">
+          <h4>🧬 종족 선택</h4>
+          <div className="race-grid">
+            {RACE_OPTIONS.map((race) => (
+              <button
+                key={race.id}
+                className={`race-card ${character.race?.type === race.id ? 'active' : ''}`}
+                onClick={() => setCharacter(prev => ({
+                  ...prev,
+                  race: { ...prev.race, type: race.id }
+                }))}
+              >
+                <span className="race-name">{race.name}</span>
+                {race.features && <span className="race-features">{race.features.split(',')[0]}</span>}
+              </button>
+            ))}
           </div>
         </div>
       )
@@ -483,6 +650,20 @@ Important: Draw exactly ONE character only, not multiple people.`
                 ))}
               </div>
             </div>
+            <div className="setting-group">
+              <label>표정</label>
+              <div className="option-buttons">
+                {(opts.expression as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.face.expression === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('face', 'expression', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )
 
@@ -512,6 +693,20 @@ Important: Draw exactly ONE character only, not multiple people.`
                     key={opt}
                     className={character.hair.color === opt ? 'active' : ''}
                     onClick={() => updateCharacter('hair', 'color', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>질감</label>
+              <div className="option-buttons">
+                {(opts.texture as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.hair.texture === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('hair', 'texture', opt)}
                   >
                     {opt}
                   </button>
@@ -790,7 +985,7 @@ Important: Draw exactly ONE character only, not multiple people.`
   return (
     <div className={`ai-generator-node-v2 ${selected ? 'selected' : ''}`}>
       <Handle type="target" position={Position.Left} id="ref-in" />
-      <NodeResizer isVisible={selected} minWidth={600} minHeight={500} />
+      <NodeResizer isVisible={selected} minWidth={800} minHeight={600} />
 
       {/* 헤더 */}
       <div className="aig-header">
@@ -834,24 +1029,50 @@ Important: Draw exactly ONE character only, not multiple people.`
                 </div>
               ) : (
                 generatedImages.map((img, idx) => (
-                  <div key={idx} className="gallery-item">
+                  <div
+                    key={idx}
+                    className="gallery-item"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/json', JSON.stringify({
+                        type: 'asset',
+                        url: img.url,
+                        prompt: img.prompt
+                      }))
+                      e.dataTransfer.effectAllowed = 'copy'
+                    }}
+                  >
                     <img
                       src={img.url}
                       alt={`생성 ${idx + 1}`}
                       onClick={() => window.open(img.url, '_blank')}
                       title={img.prompt}
+                      draggable={false}
                     />
-                    <button
-                      className="download-btn"
-                      onClick={() => {
-                        const link = document.createElement('a')
-                        link.href = img.url
-                        link.download = `character-${Date.now()}.png`
-                        link.click()
-                      }}
-                    >
-                      ⬇️
-                    </button>
+                    <div className="gallery-item-actions">
+                      <button
+                        className="action-btn"
+                        onClick={() => {
+                          navigator.clipboard.writeText(img.prompt || '')
+                          alert('프롬프트가 복사되었습니다!')
+                        }}
+                        title="프롬프트 복사"
+                      >
+                        📋
+                      </button>
+                      <button
+                        className="action-btn"
+                        onClick={() => {
+                          const link = document.createElement('a')
+                          link.href = img.url
+                          link.download = `character-${Date.now()}.png`
+                          link.click()
+                        }}
+                        title="다운로드"
+                      >
+                        ⬇️
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -861,7 +1082,19 @@ Important: Draw exactly ONE character only, not multiple people.`
 
         {/* 프롬프트 미리보기 */}
         <div className="aig-prompt-preview">
-          <label>🤖 자동 생성 프롬프트</label>
+          <div className="prompt-header">
+            <label>🤖 자동 생성 프롬프트</label>
+            <button
+              className="copy-btn"
+              onClick={() => {
+                navigator.clipboard.writeText(generatedPrompt)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+            >
+              {copied ? '✅ 복사됨!' : '📋 복사'}
+            </button>
+          </div>
           <p>{generatedPrompt}</p>
         </div>
 
