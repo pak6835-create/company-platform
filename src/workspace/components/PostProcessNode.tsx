@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
 import { PostProcessNodeData, ProcessType } from '../types'
 
-// 흰색 배경을 투명하게 변환하는 함수
+// 흰색 배경을 투명하게 변환하는 함수 (API 키 없을 때 사용)
 const removeWhiteBackground = (imageData: ImageData, threshold: number = 240): ImageData => {
   const data = imageData.data
   for (let i = 0; i < data.length; i += 4) {
@@ -17,19 +17,44 @@ const removeWhiteBackground = (imageData: ImageData, threshold: number = 240): I
   return imageData
 }
 
-// 검은색 배경을 투명하게 변환하는 함수
-const removeBlackBackground = (imageData: ImageData, threshold: number = 15): ImageData => {
-  const data = imageData.data
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i]
-    const g = data[i + 1]
-    const b = data[i + 2]
-    // 검은색에 가까운 픽셀을 투명하게
-    if (r < threshold && g < threshold && b < threshold) {
-      data[i + 3] = 0
+// 원본(흰배경)과 변환된(검정배경) 이미지를 비교해서 배경만 투명하게
+// 핵심: 원본에서 흰색이었고 + 변환 후 검정색 = 배경 영역
+const removeBackgroundByComparison = (
+  originalData: ImageData,  // 흰 배경 원본
+  blackBgData: ImageData,   // 검정 배경 변환본
+  whiteThreshold: number = 240,
+  blackThreshold: number = 30
+): ImageData => {
+  const origPixels = originalData.data
+  const blackPixels = blackBgData.data
+  const result = new Uint8ClampedArray(blackPixels)
+
+  for (let i = 0; i < origPixels.length; i += 4) {
+    const origR = origPixels[i]
+    const origG = origPixels[i + 1]
+    const origB = origPixels[i + 2]
+
+    const blackR = blackPixels[i]
+    const blackG = blackPixels[i + 1]
+    const blackB = blackPixels[i + 2]
+
+    // 원본에서 흰색에 가까웠고, 변환 후 검정색에 가까우면 = 배경
+    const wasWhite = origR > whiteThreshold && origG > whiteThreshold && origB > whiteThreshold
+    const isNowBlack = blackR < blackThreshold && blackG < blackThreshold && blackB < blackThreshold
+
+    if (wasWhite && isNowBlack) {
+      // 배경이므로 투명하게
+      result[i + 3] = 0
+    } else {
+      // 캐릭터 영역: 원본 색상 유지
+      result[i] = origR
+      result[i + 1] = origG
+      result[i + 2] = origB
+      result[i + 3] = 255
     }
   }
-  return imageData
+
+  return new ImageData(result, originalData.width, originalData.height)
 }
 
 // 어셋 라이브러리 이벤트
@@ -193,33 +218,62 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
           }
 
           if (blackBgImage) {
-            // Canvas로 검은 배경을 투명으로 변환
-            setStatusText('투명 배경 생성 중...')
-            const img = new Image()
+            // 원본(흰배경)과 변환된(검정배경) 이미지를 비교해서 배경만 투명하게
+            setStatusText('배경 비교 분석 중...')
+
+            // 원본 이미지 로드
+            const origImg = new Image()
+            const blackImg = new Image()
 
             await new Promise<void>((resolve, reject) => {
-              img.onload = () => {
-                const canvas = document.createElement('canvas')
-                canvas.width = img.width
-                canvas.height = img.height
-                const ctx = canvas.getContext('2d')
-                if (!ctx) {
-                  reject(new Error('Canvas 생성 실패'))
-                  return
+              let loadedCount = 0
+              const checkBothLoaded = () => {
+                loadedCount++
+                if (loadedCount === 2) {
+                  // 두 이미지 모두 로드됨
+                  const canvas = document.createElement('canvas')
+                  canvas.width = origImg.width
+                  canvas.height = origImg.height
+                  const ctx = canvas.getContext('2d')
+                  if (!ctx) {
+                    reject(new Error('Canvas 생성 실패'))
+                    return
+                  }
+
+                  // 원본 이미지 데이터 추출
+                  ctx.drawImage(origImg, 0, 0)
+                  const originalData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+                  // 검정 배경 이미지 데이터 추출
+                  ctx.clearRect(0, 0, canvas.width, canvas.height)
+                  ctx.drawImage(blackImg, 0, 0, canvas.width, canvas.height)
+                  const blackBgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+                  // 강도에 따른 임계값 조정
+                  const whiteThreshold = Math.round(200 + intensity * 55)  // 200~255
+                  const blackThreshold = Math.round(10 + (1 - intensity) * 40)  // 10~50
+
+                  // 비교해서 배경만 투명하게
+                  const processed = removeBackgroundByComparison(
+                    originalData,
+                    blackBgData,
+                    whiteThreshold,
+                    blackThreshold
+                  )
+                  ctx.putImageData(processed, 0, 0)
+
+                  setOutputImage(canvas.toDataURL('image/png'))
+                  resolve()
                 }
-
-                ctx.drawImage(img, 0, 0)
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-                const threshold = Math.round(15 + (1 - intensity) * 40)
-                const processed = removeBlackBackground(imageData, threshold)
-                ctx.putImageData(processed, 0, 0)
-
-                setOutputImage(canvas.toDataURL('image/png'))
-                resolve()
               }
-              img.onerror = () => reject(new Error('이미지 로드 실패'))
-              img.src = blackBgImage!
+
+              origImg.onload = checkBothLoaded
+              blackImg.onload = checkBothLoaded
+              origImg.onerror = () => reject(new Error('원본 이미지 로드 실패'))
+              blackImg.onerror = () => reject(new Error('변환 이미지 로드 실패'))
+
+              origImg.src = inputImage
+              blackImg.src = blackBgImage!
             })
           } else {
             throw new Error('AI 응답에 이미지가 없습니다')
