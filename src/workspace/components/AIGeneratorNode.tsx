@@ -92,9 +92,9 @@ const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, stri
 // Gemini 이미지 생성 모델 목록 (최신순)
 // 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
 const MODELS = [
-  { id: 'imagen-3.0-generate-002', name: 'Imagen 3 (최신)' },
-  { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash' },
-  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gemini-3-pro-image-preview', name: '나노바나나 Pro (최신)' },
+  { id: 'gemini-2.5-flash-image', name: '나노바나나 2.5' },
+  { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2.0' },
 ]
 
 // 기본 캐릭터 데이터
@@ -216,30 +216,17 @@ export function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeDat
     setError('')
 
     try {
-      // Imagen 3 모델 사용 시 다른 엔드포인트
-      let endpoint: string
-      let requestBody: object
-
-      if (model.startsWith('imagen')) {
-        // Imagen 3 API
-        endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`
-        requestBody = {
-          instances: [{ prompt: generatedPrompt }],
-          parameters: {
-            sampleCount: 1,
-            aspectRatio: '1:1',
-            safetyFilterLevel: 'block_only_high',
-            personGeneration: 'allow_adult',
-          },
-        }
-      } else {
-        // Gemini 이미지 생성 API
-        endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-        requestBody = {
-          contents: [{ parts: [{ text: generatedPrompt }] }],
-          generationConfig: { responseModalities: ['Text', 'Image'] },
-        }
+      // Gemini 이미지 생성 API (모든 모델 동일한 엔드포인트)
+      // 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const requestBody = {
+        contents: [{ parts: [{ text: generatedPrompt }] }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE']
+        },
       }
+
+      console.log('API 요청:', { model, endpoint: endpoint.replace(apiKey, '***') })
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -248,30 +235,27 @@ export function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeDat
       })
 
       const result = await response.json()
+      console.log('API 응답:', result)
 
       if (result.error) {
         throw new Error(result.error.message || JSON.stringify(result.error))
       }
 
+      // 응답에서 이미지 데이터 추출
       let imageUrl: string | null = null
+      const parts = result.candidates?.[0]?.content?.parts || []
 
-      if (model.startsWith('imagen')) {
-        // Imagen 3 응답 처리
-        const predictions = result.predictions
-        if (predictions && predictions.length > 0 && predictions[0].bytesBase64Encoded) {
-          imageUrl = 'data:image/png;base64,' + predictions[0].bytesBase64Encoded
-        }
-      } else {
-        // Gemini 응답 처리
-        const imagePart = result.candidates?.[0]?.content?.parts?.find(
-          (p: { inlineData?: { data: string } }) => p.inlineData?.data
-        )
-        if (imagePart) {
-          imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || 'image/png'
+          imageUrl = `data:${mimeType};base64,${part.inlineData.data}`
+          break
         }
       }
 
       if (!imageUrl) {
+        // 디버깅을 위한 상세 정보
+        console.error('응답 구조:', JSON.stringify(result, null, 2))
         throw new Error('이미지 생성 실패 - 응답에 이미지 데이터가 없습니다')
       }
 
