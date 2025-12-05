@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
 import { PostProcessNodeData, ProcessType } from '../types'
-import { POSTPROCESS_NODE_CONFIG } from '../config/node-configs'
 
 // 흰색 배경을 투명하게 변환하는 함수
 const removeWhiteBackground = (imageData: ImageData, threshold: number = 240): ImageData => {
@@ -12,7 +11,7 @@ const removeWhiteBackground = (imageData: ImageData, threshold: number = 240): I
     const b = data[i + 2]
     // 흰색에 가까운 픽셀을 투명하게
     if (r > threshold && g > threshold && b > threshold) {
-      data[i + 3] = 0 // 알파값을 0으로
+      data[i + 3] = 0
     }
   }
   return imageData
@@ -27,21 +26,25 @@ const removeBlackBackground = (imageData: ImageData, threshold: number = 15): Im
     const b = data[i + 2]
     // 검은색에 가까운 픽셀을 투명하게
     if (r < threshold && g < threshold && b < threshold) {
-      data[i + 3] = 0 // 알파값을 0으로
+      data[i + 3] = 0
     }
   }
   return imageData
 }
 
+// 어셋 라이브러리 이벤트
+const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number }) => {
+  window.dispatchEvent(new CustomEvent('asset-add', { detail: asset }))
+}
+
 export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNodeData>) {
   const [processType, setProcessType] = useState<ProcessType>(data.processType || 'removeBackground')
-  const [intensity, setIntensity] = useState(data.intensity || 1.0)
-  const [selectedOptions, setSelectedOptions] = useState<string[]>(data.selectedOptions || [])
+  const [intensity, setIntensity] = useState(data.intensity || 0.8)
   const [inputImage, setInputImage] = useState<string | null>(null)
   const [outputImage, setOutputImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
-  const { setNodes } = useReactFlow()
+  const { setNodes, getNodes } = useReactFlow()
 
   // 연결된 노드에서 이미지와 API 정보 가져오기
   const edges = useStore((s) => s.edges || [])
@@ -76,37 +79,209 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
     return null
   }, [edges, nodes, id])
 
+  // 연결된 이미지가 변경되면 자동으로 입력 이미지 설정
   useEffect(() => {
     if (connectedData?.image) {
       setInputImage(connectedData.image)
-      setOutputImage(null) // 새 이미지가 들어오면 출력 초기화
+      setOutputImage(null)
+      setStatusText('')
     }
   }, [connectedData?.image])
 
-  const defaultConfig = { title: '후처리', color: '#E91E63', options: [] }
-  const config = POSTPROCESS_NODE_CONFIG[processType] || POSTPROCESS_NODE_CONFIG.removeBackground || defaultConfig
-  const themeColor = config?.color || '#E91E63'
+  // 후처리 타입별 색상
+  const typeColors: Record<string, string> = {
+    removeBackground: '#E91E63',
+    extractLine: '#607D8B',
+    upscale: '#2196F3',
+    stylize: '#FF9800',
+  }
+  const themeColor = typeColors[processType] || '#E91E63'
 
+  // 노드 데이터 업데이트
   useEffect(() => {
     setNodes((nds) =>
       nds.map((n) => {
         if (n.id === id) {
-          return { ...n, data: { ...n.data, processType, intensity, selectedOptions } }
+          return { ...n, data: { ...n.data, processType, intensity, outputImage } }
         }
         return n
       })
     )
-  }, [processType, intensity, selectedOptions, id, setNodes])
+  }, [processType, intensity, outputImage, id, setNodes])
 
-  const handleTypeChange = (newType: ProcessType) => {
-    setProcessType(newType)
-    setSelectedOptions([])
+  // 후처리 실행
+  const handleProcess = async () => {
+    if (!inputImage) {
+      setStatusText('이미지가 없습니다')
+      return
+    }
+
+    setIsProcessing(true)
+    setStatusText('처리 중...')
+
+    try {
+      if (processType === 'removeBackground') {
+        const apiKey = connectedData?.apiKey
+        const model = connectedData?.model || 'gemini-2.5-flash-image'
+
+        if (apiKey) {
+          // Gemini API로 검은 배경 버전 생성
+          setStatusText('AI로 배경 변환 중...')
+
+          const base64Image = inputImage.replace(/^data:image\/\w+;base64,/, '')
+
+          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+          const requestBody = {
+            contents: [{
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: base64Image
+                  }
+                },
+                {
+                  text: 'Change the background to solid black color. Keep the character exactly the same, only change the white background to pure black (#000000). Output the image.'
+                }
+              ]
+            }],
+            generationConfig: {
+              responseModalities: ['TEXT', 'IMAGE']
+            },
+          }
+
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          })
+
+          const result = await response.json()
+
+          if (result.error) {
+            throw new Error(result.error.message)
+          }
+
+          // 응답에서 이미지 추출
+          let blackBgImage: string | null = null
+          const parts = result.candidates?.[0]?.content?.parts || []
+          for (const part of parts) {
+            if (part.inlineData?.data) {
+              blackBgImage = `data:image/png;base64,${part.inlineData.data}`
+              break
+            }
+          }
+
+          if (blackBgImage) {
+            // Canvas로 검은 배경을 투명으로 변환
+            setStatusText('투명 배경 생성 중...')
+            const img = new Image()
+
+            await new Promise<void>((resolve, reject) => {
+              img.onload = () => {
+                const canvas = document.createElement('canvas')
+                canvas.width = img.width
+                canvas.height = img.height
+                const ctx = canvas.getContext('2d')
+                if (!ctx) {
+                  reject(new Error('Canvas 생성 실패'))
+                  return
+                }
+
+                ctx.drawImage(img, 0, 0)
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+                const threshold = Math.round(15 + (1 - intensity) * 40)
+                const processed = removeBlackBackground(imageData, threshold)
+                ctx.putImageData(processed, 0, 0)
+
+                setOutputImage(canvas.toDataURL('image/png'))
+                resolve()
+              }
+              img.onerror = () => reject(new Error('이미지 로드 실패'))
+              img.src = blackBgImage!
+            })
+          } else {
+            throw new Error('AI 응답에 이미지가 없습니다')
+          }
+        } else {
+          // API 키 없으면 흰색 배경 직접 제거
+          setStatusText('흰색 배경 제거 중...')
+          const img = new Image()
+
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => {
+              const canvas = document.createElement('canvas')
+              canvas.width = img.width
+              canvas.height = img.height
+              const ctx = canvas.getContext('2d')
+              if (!ctx) {
+                reject(new Error('Canvas 생성 실패'))
+                return
+              }
+
+              ctx.drawImage(img, 0, 0)
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+              const threshold = Math.round(200 + intensity * 55)
+              const processed = removeWhiteBackground(imageData, threshold)
+              ctx.putImageData(processed, 0, 0)
+
+              setOutputImage(canvas.toDataURL('image/png'))
+              resolve()
+            }
+            img.onerror = () => reject(new Error('이미지 로드 실패'))
+            img.src = inputImage
+          })
+        }
+      } else {
+        // 다른 후처리는 미구현
+        setStatusText('준비 중인 기능입니다')
+        await new Promise(r => setTimeout(r, 500))
+        setOutputImage(inputImage)
+      }
+
+      setStatusText('✅ 완료!')
+    } catch (err) {
+      console.error('후처리 오류:', err)
+      setStatusText(`❌ ${err instanceof Error ? err.message : '처리 실패'}`)
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
-  const toggleOption = (optId: string) => {
-    setSelectedOptions((prev) =>
-      prev.includes(optId) ? prev.filter((i) => i !== optId) : [...prev, optId]
-    )
+  // 캔버스에 이미지 추가
+  const addToCanvas = () => {
+    if (!outputImage) return
+
+    const currentNodes = getNodes()
+    const newId = `node-${Date.now()}`
+
+    // 현재 노드 위치 기준으로 오른쪽에 배치
+    const currentNode = currentNodes.find(n => n.id === id)
+    const position = currentNode
+      ? { x: currentNode.position.x + 300, y: currentNode.position.y }
+      : { x: 100, y: 100 }
+
+    setNodes((nds) => [
+      ...nds,
+      {
+        id: newId,
+        type: 'image',
+        position,
+        data: { imageUrl: outputImage, label: '배경 제거됨' },
+        style: { width: 200, height: 200 },
+      },
+    ])
+
+    // 어셋 라이브러리에도 추가
+    emitAssetAdd({
+      url: outputImage,
+      prompt: `${processType} 처리됨`,
+      timestamp: Date.now(),
+    })
+
+    setStatusText('📌 캔버스에 추가됨!')
   }
 
   return (
@@ -115,260 +290,103 @@ export function PostProcessNode({ data, selected, id }: NodeProps<PostProcessNod
       style={{ '--pp-color': themeColor } as React.CSSProperties}
     >
       <Handle type="target" position={Position.Left} id="pp-in" />
-      <NodeResizer isVisible={selected} minWidth={260} minHeight={220} />
+      <NodeResizer isVisible={selected} minWidth={280} minHeight={300} />
 
       <div className="pp-node-header" style={{ backgroundColor: themeColor }}>
         <span>✨ 후처리</span>
+        {connectedData?.apiKey && <span className="pp-api-badge">AI</span>}
       </div>
 
       <div className="pp-node-content pp-scrollable nodrag" onMouseDown={(e) => e.stopPropagation()}>
+        {/* 후처리 타입 선택 */}
         <div className="pp-type-selector">
           <label>후처리 타입</label>
           <select
-            className="nodrag"
             value={processType}
-            onChange={(e) => handleTypeChange(e.target.value as ProcessType)}
+            onChange={(e) => setProcessType(e.target.value as ProcessType)}
             style={{ borderColor: themeColor }}
           >
             <option value="removeBackground">🔲 배경 제거</option>
-            <option value="extractLine">✏️ 라인 추출</option>
-            <option value="materialID">🏷️ 재질맵</option>
-            <option value="upscale">🔍 업스케일</option>
-            <option value="stylize">✨ 스타일 변환</option>
+            <option value="extractLine">✏️ 라인 추출 (준비중)</option>
+            <option value="upscale">🔍 업스케일 (준비중)</option>
+            <option value="stylize">✨ 스타일 변환 (준비중)</option>
           </select>
         </div>
 
+        {/* 강도 슬라이더 */}
         <div className="pp-intensity">
           <div className="pp-intensity-label">
-            <span>적용 강도</span>
+            <span>제거 강도</span>
             <span>{Math.round(intensity * 100)}%</span>
           </div>
           <input
-            className="nodrag"
             type="range"
-            min="0"
+            min="0.5"
             max="1"
             step="0.05"
             value={intensity}
             onChange={(e) => setIntensity(parseFloat(e.target.value))}
             style={{ accentColor: themeColor }}
           />
+          <div className="pp-intensity-hint">
+            {intensity < 0.7 ? '약하게 (일부만 제거)' : intensity < 0.9 ? '보통' : '강하게 (더 많이 제거)'}
+          </div>
         </div>
 
-        <div className="pp-options">
-          {(config?.options || []).map((opt) => (
-            <button
-              key={opt.id}
-              className={`pp-opt-btn ${selectedOptions.includes(opt.id) ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleOption(opt.id)
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              style={{
-                borderColor: selectedOptions.includes(opt.id) ? themeColor : '#ddd',
-                backgroundColor: selectedOptions.includes(opt.id) ? `${themeColor}20` : '#fff',
-                color: selectedOptions.includes(opt.id) ? themeColor : '#666',
-              }}
-            >
-              {selectedOptions.includes(opt.id) && '✓ '}
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 입력 이미지 미리보기 */}
-        {inputImage && (
+        {/* 입력 이미지 */}
+        {inputImage ? (
           <div className="pp-image-preview">
-            <label>📥 입력 이미지</label>
+            <label>📥 입력</label>
             <img src={inputImage} alt="Input" />
+          </div>
+        ) : (
+          <div className="pp-help">
+            💡 캐릭터 메이커와 연결하세요
+            <br />
+            <small>노드를 선으로 연결하면 이미지가 자동으로 들어옵니다</small>
           </div>
         )}
 
         {/* 처리 버튼 */}
         <button
           className="pp-process-btn"
-          onClick={async (e) => {
-            e.stopPropagation()
-            if (!inputImage) return
-            setIsProcessing(true)
-            setStatusText('처리 시작...')
-
-            try {
-              if (processType === 'removeBackground') {
-                // 배경 제거 처리
-                const apiKey = connectedData?.apiKey
-                const model = connectedData?.model || 'gemini-2.5-flash-image'
-
-                if (apiKey) {
-                  // Gemini API로 검은 배경 버전 생성
-                  setStatusText('AI로 배경 변환 중...')
-
-                  // 이미지를 base64로 변환 (data: 접두사 제거)
-                  const base64Image = inputImage.replace(/^data:image\/\w+;base64,/, '')
-
-                  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-                  const requestBody = {
-                    contents: [{
-                      parts: [
-                        {
-                          inlineData: {
-                            mimeType: 'image/png',
-                            data: base64Image
-                          }
-                        },
-                        {
-                          text: 'Change the background to solid black color. Keep the character exactly the same, only change the white background to pure black (#000000). Output the image.'
-                        }
-                      ]
-                    }],
-                    generationConfig: {
-                      responseModalities: ['TEXT', 'IMAGE']
-                    },
-                  }
-
-                  const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody),
-                  })
-
-                  const result = await response.json()
-                  console.log('배경 변환 응답:', result)
-
-                  if (result.error) {
-                    throw new Error(result.error.message)
-                  }
-
-                  // 응답에서 이미지 추출
-                  let blackBgImage: string | null = null
-                  const parts = result.candidates?.[0]?.content?.parts || []
-                  for (const part of parts) {
-                    if (part.inlineData?.data) {
-                      blackBgImage = `data:image/png;base64,${part.inlineData.data}`
-                      break
-                    }
-                  }
-
-                  if (blackBgImage) {
-                    // Canvas로 검은 배경을 투명으로 변환
-                    setStatusText('투명 배경 생성 중...')
-                    const img = new Image()
-                    img.crossOrigin = 'anonymous'
-
-                    await new Promise<void>((resolve, reject) => {
-                      img.onload = () => {
-                        const canvas = document.createElement('canvas')
-                        canvas.width = img.width
-                        canvas.height = img.height
-                        const ctx = canvas.getContext('2d')
-                        if (!ctx) {
-                          reject(new Error('Canvas context 생성 실패'))
-                          return
-                        }
-
-                        ctx.drawImage(img, 0, 0)
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-                        // 강도에 따른 임계값 조정
-                        const threshold = Math.round(15 + (1 - intensity) * 30)
-                        const processed = removeBlackBackground(imageData, threshold)
-                        ctx.putImageData(processed, 0, 0)
-
-                        setOutputImage(canvas.toDataURL('image/png'))
-                        resolve()
-                      }
-                      img.onerror = reject
-                      img.src = blackBgImage
-                    })
-                  } else {
-                    throw new Error('AI 응답에 이미지가 없습니다')
-                  }
-                } else {
-                  // API 키 없으면 흰색 배경 직접 제거
-                  setStatusText('흰색 배경 제거 중...')
-                  const img = new Image()
-                  img.crossOrigin = 'anonymous'
-
-                  await new Promise<void>((resolve, reject) => {
-                    img.onload = () => {
-                      const canvas = document.createElement('canvas')
-                      canvas.width = img.width
-                      canvas.height = img.height
-                      const ctx = canvas.getContext('2d')
-                      if (!ctx) {
-                        reject(new Error('Canvas context 생성 실패'))
-                        return
-                      }
-
-                      ctx.drawImage(img, 0, 0)
-                      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-                      // 강도에 따른 임계값 조정 (높을수록 더 많은 흰색 제거)
-                      const threshold = Math.round(200 + intensity * 55)
-                      const processed = removeWhiteBackground(imageData, threshold)
-                      ctx.putImageData(processed, 0, 0)
-
-                      setOutputImage(canvas.toDataURL('image/png'))
-                      resolve()
-                    }
-                    img.onerror = reject
-                    img.src = inputImage
-                  })
-                }
-              } else {
-                // 다른 후처리는 아직 미구현 (원본 유지)
-                setStatusText('처리 중...')
-                await new Promise(r => setTimeout(r, 500))
-                setOutputImage(inputImage)
-              }
-
-              setStatusText('완료!')
-            } catch (err) {
-              console.error('후처리 오류:', err)
-              setStatusText(err instanceof Error ? err.message : '처리 실패')
-            } finally {
-              setIsProcessing(false)
-              setTimeout(() => setStatusText(''), 3000)
-            }
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleProcess}
           disabled={!inputImage || isProcessing}
-          style={{ backgroundColor: themeColor }}
+          style={{ backgroundColor: inputImage ? themeColor : '#ccc' }}
         >
-          {isProcessing ? '⏳ 처리 중...' : '✨ 후처리 적용'}
+          {isProcessing ? '⏳ 처리 중...' : '🔲 배경 제거 실행'}
         </button>
 
         {/* 상태 텍스트 */}
         {statusText && (
-          <div className="pp-status" style={{ color: themeColor }}>
-            {statusText}
-          </div>
+          <div className="pp-status">{statusText}</div>
         )}
 
-        {/* 출력 이미지 미리보기 */}
+        {/* 출력 이미지 */}
         {outputImage && (
           <div className="pp-image-preview output">
-            <label>📤 출력 이미지</label>
-            <img src={outputImage} alt="Output" />
-            <button
-              className="pp-download-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                const link = document.createElement('a')
-                link.href = outputImage
-                link.download = `processed-${Date.now()}.png`
-                link.click()
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              ⬇️ 다운로드
-            </button>
+            <label>📤 결과 (투명 배경)</label>
+            <img src={outputImage} alt="Output" style={{ background: 'repeating-conic-gradient(#ddd 0% 25%, white 0% 50%) 50% / 16px 16px' }} />
+            <div className="pp-output-actions">
+              <button
+                className="pp-action-btn"
+                onClick={addToCanvas}
+              >
+                📌 캔버스에 추가
+              </button>
+              <button
+                className="pp-action-btn download"
+                onClick={() => {
+                  const link = document.createElement('a')
+                  link.href = outputImage
+                  link.download = `transparent-${Date.now()}.png`
+                  link.click()
+                }}
+              >
+                ⬇️ PNG 다운로드
+              </button>
+            </div>
           </div>
-        )}
-
-        {!inputImage && (
-          <div className="pp-help">💡 AI 생성기나 이미지 노드를 연결하세요</div>
         )}
       </div>
 
