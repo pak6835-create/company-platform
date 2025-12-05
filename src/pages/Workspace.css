@@ -3292,3 +3292,397 @@
   border-color: #8b5cf6 !important;
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%) !important;
 }
+
+/* ==================== AI 생성기 v2 (캐릭터 메이커 통합) ==================== */
+.ai-generator-node-v2 {
+  width: 100%;
+  height: 100%;
+  min-width: 600px;
+  min-height: 500px;
+  background: #111827;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+}
+
+.ai-generator-node-v2.selected {
+  box-shadow: 0 0 0 3px #8b5cf6, 0 4px 24px rgba(139, 92, 246, 0.3);
+}
+
+/* 헤더 */
+.aig-header {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.aig-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.aig-header-actions button {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.aig-header-actions button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.aig-header-actions button.active {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* 본문 */
+.aig-body {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  background: #1f2937;
+}
+
+/* 캐릭터 뷰 - 2열 레이아웃 */
+.aig-character-view {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 200px;
+}
+
+/* 왼쪽 카테고리 */
+.aig-categories {
+  width: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.aig-category-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  background: #374151;
+  border: none;
+  border-radius: 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.aig-category-btn:hover {
+  background: #4b5563;
+  color: #fff;
+}
+
+.aig-category-btn.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.aig-category-btn .cat-icon {
+  font-size: 14px;
+}
+
+.aig-category-btn .cat-name {
+  flex: 1;
+}
+
+/* 오른쪽 설정 패널 */
+.aig-settings-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.char-settings-panel {
+  background: #374151;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.char-settings-panel h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #fff;
+  border-bottom: 1px solid #4b5563;
+  padding-bottom: 8px;
+}
+
+.setting-group {
+  margin-bottom: 12px;
+}
+
+.setting-group label {
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.option-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.option-buttons button {
+  padding: 6px 12px;
+  background: #4b5563;
+  border: none;
+  border-radius: 6px;
+  color: #d1d5db;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.option-buttons button:hover {
+  background: #6b7280;
+  color: #fff;
+}
+
+.option-buttons button.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+/* 설정 뷰 (API 키 등) */
+.aig-settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px;
+}
+
+.aig-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aig-field label {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.aig-field input,
+.aig-field select {
+  padding: 10px 12px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.aig-field input:focus,
+.aig-field select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.aig-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.aig-input-row input {
+  flex: 1;
+}
+
+.aig-input-row button {
+  padding: 10px 14px;
+  background: #4b5563;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.aig-input-row button:hover {
+  background: #6b7280;
+}
+
+.aig-reset-btn {
+  padding: 10px 16px;
+  background: #ef4444;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.aig-reset-btn:hover {
+  background: #dc2626;
+}
+
+/* 프롬프트 미리보기 */
+.aig-prompt-preview {
+  background: #374151;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid #3b82f6;
+}
+
+.aig-prompt-preview label {
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.aig-prompt-preview p {
+  margin: 0;
+  font-size: 11px;
+  color: #d1d5db;
+  line-height: 1.5;
+  word-break: break-word;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+/* 에러 */
+.aig-error {
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+/* 생성 버튼 */
+.aig-generate-btn {
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.aig-generate-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+.aig-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 갤러리 */
+.aig-gallery {
+  background: #374151;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.aig-gallery > label {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.aig-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.aig-gallery-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.aig-gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+
+.aig-gallery-item:hover img {
+  transform: scale(1.05);
+}
+
+.aig-download-btn {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.aig-gallery-item:hover .aig-download-btn {
+  opacity: 1;
+}
+
+.aig-clear-btn {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #4b5563;
+  border: none;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.aig-clear-btn:hover {
+  background: #6b7280;
+  color: #fff;
+}
+
+/* 핸들 스타일 */
+.ai-generator-node-v2 .react-flow__handle {
+  width: 14px;
+  height: 14px;
+  background: #8b5cf6;
+  border: 2px solid #1f2937;
+}

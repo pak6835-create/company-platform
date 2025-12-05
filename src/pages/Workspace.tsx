@@ -320,34 +320,7 @@ function WorkspaceCanvas() {
                 addImageToCanvas(imageUrl, label)
               },
             },
-            style: { width: 320, height: 400 },
-          }
-          break
-        case 'promptScene':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'promptScene',
-            position,
-            data: { promptType: 'scene' },
-            style: { width: 300, height: 350 },
-          }
-          break
-        case 'promptCharacter':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'promptCharacter',
-            position,
-            data: { promptType: 'character' },
-            style: { width: 300, height: 350 },
-          }
-          break
-        case 'promptProps':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'promptProps',
-            position,
-            data: { promptType: 'props' },
-            style: { width: 300, height: 350 },
+            style: { width: 650, height: 600 },
           }
           break
         case 'note':
@@ -434,15 +407,6 @@ function WorkspaceCanvas() {
             position,
             data: { processType: 'removeBackground', intensity: 1.0, selectedOptions: [] },
             style: { width: 280, height: 300 },
-          }
-          break
-        case 'characterMaker':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'characterMaker',
-            position,
-            data: { selections: {}, combinedPrompt: '' },
-            style: { width: 420, height: 550 },
           }
           break
         default:
@@ -578,9 +542,9 @@ function WorkspaceCanvas() {
             </button>
           </div>
           <div className="add-panel-content add-panel-scrollable">
-            {/* AI 도구 */}
+            {/* 캐릭터 메이커 (AI 이미지 생성 통합) */}
             <div className="add-section">
-              <h4>AI 생성</h4>
+              <h4>캐릭터 메이커</h4>
               <div className="draggable-items">
                 <div
                   className="draggable-item ai-generator-drag"
@@ -590,83 +554,7 @@ function WorkspaceCanvas() {
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
-                  <span className="drag-icon">🤖</span>
-                  <span>AI 생성기</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 프롬프트 빌더 */}
-            <div className="add-section">
-              <h4>프롬프트 빌더</h4>
-              <div className="draggable-items">
-                <div
-                  className="draggable-item prompt-scene-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'promptScene')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🎬</span>
-                  <span>장면</span>
-                </div>
-                <div
-                  className="draggable-item prompt-character-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'promptCharacter')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🧑</span>
-                  <span>캐릭터</span>
-                </div>
-                <div
-                  className="draggable-item prompt-props-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'promptProps')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🎒</span>
-                  <span>소품</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 이미지 참조 */}
-            <div className="add-section">
-              <h4>이미지 참조</h4>
-              <div className="draggable-items">
-                <div
-                  className="draggable-item reference-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'reference')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🖼️</span>
-                  <span>이미지 참조</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 캐릭터 메이커 */}
-            <div className="add-section">
-              <h4>캐릭터 메이커</h4>
-              <div className="draggable-items">
-                <div
-                  className="draggable-item character-maker-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'characterMaker')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🎭</span>
+                  <span className="drag-icon">🎨</span>
                   <span>캐릭터 메이커</span>
                 </div>
               </div>

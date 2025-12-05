@@ -7,10 +7,8 @@ export { BoardNode } from './BoardNode'
 
 // AI 관련 노드
 export { AIGeneratorNode } from './AIGeneratorNode'
-export { PromptSceneNode, PromptCharacterNode, PromptPropsNode } from './PromptNodes'
 export { ReferenceNode } from './ReferenceNode'
 export { PostProcessNode } from './PostProcessNode'
-export { CharacterMakerNode } from './CharacterMakerNode'
 
 // 노드 타입 맵
 import { ImageNode } from './ImageNode'
@@ -19,10 +17,8 @@ import { TextNode } from './TextNode'
 import { ShapeNode } from './ShapeNode'
 import { BoardNode } from './BoardNode'
 import { AIGeneratorNode } from './AIGeneratorNode'
-import { PromptSceneNode, PromptCharacterNode, PromptPropsNode } from './PromptNodes'
 import { ReferenceNode } from './ReferenceNode'
 import { PostProcessNode } from './PostProcessNode'
-import { CharacterMakerNode } from './CharacterMakerNode'
 
 export const nodeTypes = {
   image: ImageNode,
@@ -31,10 +27,6 @@ export const nodeTypes = {
   shape: ShapeNode,
   board: BoardNode,
   aiGenerator: AIGeneratorNode,
-  promptScene: PromptSceneNode,
-  promptCharacter: PromptCharacterNode,
-  promptProps: PromptPropsNode,
   reference: ReferenceNode,
   postProcess: PostProcessNode,
-  characterMaker: CharacterMakerNode,
 }

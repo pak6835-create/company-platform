@@ -1,163 +1,229 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { NodeProps, NodeResizer, Handle, Position, useStore, useReactFlow } from 'reactflow'
+import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
-// 모델 목록 (나노바나나 = Gemini 이미지 생성 모델 코드명)
-// 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
+// ==================== 카테고리 및 옵션 데이터 ====================
+
+const CATEGORIES = [
+  { id: 'base', name: '베이스', icon: '👤' },
+  { id: 'face', name: '얼굴', icon: '👦' },
+  { id: 'hair', name: '머리카락', icon: '💇' },
+  { id: 'top', name: '상의', icon: '👕' },
+  { id: 'bottom', name: '하의', icon: '👖' },
+  { id: 'shoes', name: '신발', icon: '👟' },
+  { id: 'accessory', name: '악세서리', icon: '💍' },
+  { id: 'weapon', name: '무기', icon: '⚔️' },
+  { id: 'pose', name: '포즈', icon: '🏃' },
+]
+
+const OPTIONS_DATA: Record<string, Record<string, string[] | Record<string, string[]>>> = {
+  base: {
+    gender: ['남성', '여성'],
+    bodyType: ['마름', '보통', '건장', '근육질', '통통'],
+    height: ['5등신', '6등신', '7등신', '8등신'],
+    age: ['10대', '20대', '30대', '40대+'],
+  },
+  face: {
+    style: ['날카로운', '부드러운', '귀여운', '강인한', '차가운', '따뜻한', '신비로운'],
+    eyes: ['큰 눈', '작은 눈', '날카로운 눈', '처진 눈', '올라간 눈'],
+    skinTone: ['밝은', '보통', '어두운', '창백한'],
+  },
+  hair: {
+    style: ['단발', '중발', '장발', '묶음머리', '올림머리', '대머리'],
+    color: ['검정', '갈색', '금발', '빨강', '파랑', '은색', '분홍', '초록'],
+  },
+  top: {
+    category: ['일상', '정장', '전투', '판타지', '학교', '전통'],
+    items: {
+      '일상': ['티셔츠', '셔츠', '후드티', '니트', '자켓'],
+      '정장': ['정장 상의', '조끼', '블라우스'],
+      '전투': ['전투복', '갑옷', '가죽 아머', '검은 코트'],
+      '판타지': ['로브', '망토', '마법사 복'],
+      '학교': ['교복 상의', '체육복'],
+      '전통': ['한복 저고리', '기모노'],
+    },
+  },
+  bottom: {
+    category: ['일상', '정장', '전투', '판타지', '학교', '전통'],
+    items: {
+      '일상': ['청바지', '면바지', '반바지', '치마', '레깅스'],
+      '정장': ['정장 바지', '정장 치마'],
+      '전투': ['전투 바지', '갑옷 하의'],
+      '판타지': ['로브 하의', '판타지 치마'],
+      '학교': ['교복 바지', '교복 치마'],
+      '전통': ['한복 치마', '한복 바지'],
+    },
+  },
+  shoes: {
+    item: ['운동화', '구두', '부츠', '샌들', '슬리퍼', '맨발', '전투화', '하이힐'],
+  },
+  accessory: {
+    head: ['없음', '모자', '왕관', '머리띠', '안경', '선글라스', '귀걸이'],
+    neck: ['없음', '목걸이', '스카프', '넥타이', '초커'],
+    hands: ['없음', '반지', '장갑', '팔찌', '시계'],
+    other: ['없음', '가방', '배낭', '날개', '꼬리'],
+  },
+  weapon: {
+    category: ['없음', '검/도', '창/봉', '활/총', '마법', '기타'],
+    items: {
+      '검/도': ['장검', '단검', '대검', '이도류', '카타나'],
+      '창/봉': ['창', '봉', '삼지창', '할버드'],
+      '활/총': ['활', '석궁', '권총', '라이플'],
+      '마법': ['지팡이', '마법봉', '오브', '마법책'],
+      '기타': ['방패', '도끼', '낫', '채찍'],
+    },
+    position: ['오른손', '왼손', '양손', '등에', '허리에'],
+  },
+  pose: {
+    category: ['기본', '전투', '일상', '감정', '액션'],
+    poses: {
+      '기본': ['서있기', '앉기', '무릎꿇기', '누워있기'],
+      '전투': ['검 들기', '방어 자세', '공격 자세', '마법 시전'],
+      '일상': ['걷기', '손 흔들기', '팔짱', '주머니에 손'],
+      '감정': ['기쁨', '슬픔', '분노', '놀람'],
+      '액션': ['달리기', '점프', '회전', '착지'],
+    },
+    angle: ['정면', '측면', '뒷면', '3/4'],
+    direction: ['왼쪽 보기', '정면 보기', '오른쪽 보기'],
+  },
+}
+
+// 모델 목록
 const MODELS = [
   { id: 'gemini-2.0-flash-preview-image-generation', name: '나노바나나 2' },
   { id: 'gemini-2.5-flash-preview-image-generation', name: '나노바나나 2.5' },
-  { id: 'gemini-3-pro-image-preview', name: '나노바나나 3 Pro' },
 ]
 
-// 어셋 라이브러리 이벤트 발생 함수
+// 기본 캐릭터 데이터
+const DEFAULT_CHARACTER = {
+  base: { gender: '남성', bodyType: '보통', height: '7등신', age: '20대' },
+  face: { style: '날카로운', eyes: '날카로운 눈', skinTone: '보통' },
+  hair: { style: '단발', color: '검정' },
+  top: { category: '일상', item: '티셔츠' },
+  bottom: { category: '일상', item: '청바지' },
+  shoes: { item: '운동화' },
+  accessory: { head: '없음', neck: '없음', hands: '없음', other: '없음' },
+  weapon: { category: '없음', item: '', position: '오른손' },
+  pose: { category: '기본', pose: '서있기', angle: '3/4', direction: '정면 보기' },
+}
+
+// 어셋 라이브러리 이벤트
 const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number }) => {
   window.dispatchEvent(new CustomEvent('asset-add', { detail: asset }))
 }
 
+// ==================== 메인 컴포넌트 ====================
+
 export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
-  const [localApiKey, setLocalApiKey] = useState(data.apiKey || '')
-  const [localModel, setLocalModel] = useState(data.model || 'gemini-2.0-flash-preview-image-generation')
-  const [localPrompt, setLocalPrompt] = useState(data.prompt || '')
+  // API 설정
+  const [apiKey, setApiKey] = useState(data.apiKey || '')
+  const [model, setModel] = useState(data.model || MODELS[0].id)
+  const [showApiKey, setShowApiKey] = useState(false)
+
+  // 캐릭터 설정
+  const [character, setCharacter] = useState<typeof DEFAULT_CHARACTER>(
+    data.character || DEFAULT_CHARACTER
+  )
+  const [selectedCategory, setSelectedCategory] = useState('base')
+
+  // UI 상태
+  const [viewMode, setViewMode] = useState<'character' | 'settings'>('character')
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
-  const [showApiKey, setShowApiKey] = useState(false)
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
+
   const nodeRef = useRef<HTMLDivElement>(null)
   const { setNodes } = useReactFlow()
 
-  // 연결된 노드 데이터 수집 - 안전하게 접근
-  const edges = useStore((s) => s.edges || [])
-  const nodes = useStore((s) => s.nodes || [])
+  // ==================== 프롬프트 자동 생성 ====================
 
-  // useMemo로 연결 정보 계산 (안전한 접근)
-  const { connectedSources, connectedPrompts, connectedRefs, connectedCharMakers } = useMemo(() => {
-    if (!Array.isArray(edges) || !Array.isArray(nodes)) {
-      return { connectedSources: [], connectedPrompts: '', connectedRefs: [], connectedCharMakers: [] }
-    }
-
-    // 이 노드를 타겟으로 하는 모든 엣지의 소스 노드 찾기
-    const incomingEdges = edges.filter((e) => e && e.target === id)
-
-    // 디버그: 엣지와 노드 ID 상세 비교
-    console.log('[AI Generator] 내 ID:', id)
-    console.log('[AI Generator] 모든 노드 ID:', nodes.map(n => n.id))
-    console.log('[AI Generator] 엣지 소스 ID:', incomingEdges.map(e => e.source))
-
-    const sources = incomingEdges
-      .map((e) => {
-        const found = nodes.find((n) => n && n.id === e.source)
-        console.log('[AI Generator] 소스 찾기:', e.source, '→', found ? found.type : 'NOT FOUND')
-        return found
-      })
-      .filter(Boolean)
-
-    // 디버그: 연결 상태 로깅
-    console.log('[AI Generator] 연결된 엣지:', incomingEdges.length, incomingEdges)
-    console.log('[AI Generator] 연결된 소스 노드:', sources.map(n => ({ type: n?.type, id: n?.id, data: n?.data })))
-
-    // 프롬프트 노드에서 combinedPrompt 수집
-    const promptNodes = sources.filter((n) => n?.type?.startsWith('prompt'))
-    const promptTexts = promptNodes
-      .map((n) => n?.data?.combinedPrompt)
-      .filter(Boolean)
-
-    // 캐릭터 메이커 노드에서 combinedPrompt 수집
-    const charMakers = sources.filter((n) => n?.type === 'characterMaker')
-    const charMakerTexts = charMakers
-      .map((n) => n?.data?.combinedPrompt)
-      .filter(Boolean)
-
-    console.log('[AI Generator] 캐릭터 메이커 노드:', charMakers.length, '프롬프트:', charMakerTexts)
-
-    // 모든 프롬프트 합치기
-    const allPrompts = [...promptTexts, ...charMakerTexts].join(', ')
-
-    const refs = sources
-      .filter((n) => n?.type === 'reference')
-      .map((n) => ({
-        type: n?.data?.referenceType || 'unknown',
-        hasImage: !!n?.data?.image,
-        image: n?.data?.image || null,
-        strength: n?.data?.strength || 0.8,
-      }))
-
-    return {
-      connectedSources: sources,
-      connectedPrompts: allPrompts,
-      connectedRefs: refs,
-      connectedCharMakers: charMakers
-    }
-  }, [edges, nodes, id])
-
-  // 최종 프롬프트 생성
-  const getFinalPrompt = useCallback(() => {
+  const generatedPrompt = useMemo(() => {
     const parts: string[] = []
-    if (localPrompt.trim()) parts.push(localPrompt.trim())
-    if (connectedPrompts) parts.push(connectedPrompts)
+
+    // 베이스
+    parts.push(character.base.gender === '남성' ? 'male' : 'female')
+    parts.push(`${character.base.bodyType} build`)
+    parts.push(character.base.height)
+    parts.push(character.base.age)
+
+    // 얼굴
+    parts.push(`${character.face.style} face`)
+    parts.push(character.face.eyes)
+    parts.push(`${character.face.skinTone} skin`)
+
+    // 머리
+    parts.push(`${character.hair.color} ${character.hair.style} hair`)
+
+    // 의상
+    if (character.top.item) {
+      parts.push(`wearing ${character.top.item}`)
+    }
+    if (character.bottom.item) {
+      parts.push(`and ${character.bottom.item}`)
+    }
+    if (character.shoes.item) {
+      parts.push(character.shoes.item)
+    }
+
+    // 악세서리
+    const accessories = []
+    if (character.accessory.head !== '없음') accessories.push(character.accessory.head)
+    if (character.accessory.neck !== '없음') accessories.push(character.accessory.neck)
+    if (character.accessory.hands !== '없음') accessories.push(character.accessory.hands)
+    if (character.accessory.other !== '없음') accessories.push(character.accessory.other)
+    if (accessories.length > 0) {
+      parts.push(`with ${accessories.join(', ')}`)
+    }
+
+    // 무기
+    if (character.weapon.category !== '없음' && character.weapon.item) {
+      parts.push(`holding ${character.weapon.item} in ${character.weapon.position}`)
+    }
+
+    // 포즈
+    parts.push(`${character.pose.pose} pose`)
+    parts.push(`${character.pose.angle} view`)
+    parts.push(`looking ${character.pose.direction}`)
+
+    // 스타일
+    parts.push('webtoon style', 'clean lines', 'high quality', 'detailed')
+
     return parts.join(', ')
-  }, [localPrompt, connectedPrompts])
+  }, [character])
 
-  // 노드 크기 자동 조절
-  const autoResizeNode = useCallback(() => {
-    if (nodeRef.current) {
-      const height = nodeRef.current.scrollHeight + 20
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.id === id) {
-            return { ...n, style: { ...n.style, height: Math.max(height, 400) } }
-          }
-          return n
-        })
-      )
-    }
-  }, [id, setNodes])
+  // ==================== 카테고리별 업데이트 함수 ====================
 
-  // 이미지 갤러리가 변경될 때 크기 자동 조절
-  useEffect(() => {
-    if (generatedImages.length > 0) {
-      setTimeout(autoResizeNode, 100)
-    }
-  }, [generatedImages.length, autoResizeNode])
+  const updateCharacter = useCallback(
+    (category: string, field: string, value: string) => {
+      setCharacter((prev) => ({
+        ...prev,
+        [category]: {
+          ...prev[category as keyof typeof prev],
+          [field]: value,
+        },
+      }))
+    },
+    []
+  )
+
+  // ==================== AI 이미지 생성 ====================
 
   const handleGenerate = async () => {
-    const finalPrompt = getFinalPrompt()
-    if (!localApiKey || !finalPrompt) {
-      setError('API 키와 프롬프트를 입력하세요')
+    if (!apiKey) {
+      setError('API 키를 입력하세요')
       return
     }
     setIsGenerating(true)
     setError('')
 
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${localModel}:generateContent?key=${localApiKey}`
-
-      // API 요청 파트 구성
-      const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = []
-
-      // 텍스트 프롬프트 추가
-      parts.push({ text: finalPrompt })
-
-      // 연결된 이미지 참조 추가 (Gemini multimodal)
-      const refImages = connectedRefs.filter((ref) => ref.hasImage && ref.image)
-      for (const ref of refImages) {
-        // base64 데이터 추출 (data:image/png;base64, 제거)
-        const base64Data = ref.image.split(',')[1]
-        if (base64Data) {
-          const mimeType = ref.image.split(';')[0].split(':')[1] || 'image/png'
-          parts.push({
-            inlineData: { mimeType, data: base64Data }
-          })
-          // 참조 타입에 따른 추가 프롬프트
-          parts.push({ text: `Use this image as ${ref.type} reference with ${Math.round(ref.strength * 100)}% strength.` })
-        }
-      }
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts }],
+          contents: [{ parts: [{ text: generatedPrompt }] }],
           generationConfig: { responseModalities: ['Text', 'Image'] },
         }),
       })
@@ -171,16 +237,13 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       if (!imagePart) throw new Error('이미지 생성 실패')
 
       const imageUrl = 'data:image/png;base64,' + imagePart.inlineData.data
-
-      // 생성된 이미지를 목록에 추가
-      const newImage = { url: imageUrl, prompt: finalPrompt.slice(0, 50) + '...' }
+      const newImage = { url: imageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
       setGeneratedImages((prev) => [newImage, ...prev].slice(0, 10))
 
-      // 어셋 라이브러리에 자동 추가
-      emitAssetAdd({ url: imageUrl, prompt: finalPrompt, timestamp: Date.now() })
+      emitAssetAdd({ url: imageUrl, prompt: generatedPrompt, timestamp: Date.now() })
 
       if (data.onGenerate) {
-        data.onGenerate(imageUrl, finalPrompt.slice(0, 30) + '...')
+        data.onGenerate(imageUrl, generatedPrompt.slice(0, 30) + '...')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '생성 실패')
@@ -189,119 +252,584 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     }
   }
 
-  const hasConnections = connectedSources.length > 0
+  // ==================== 설정 패널 렌더링 ====================
+
+  const renderSettingsPanel = () => {
+    const cat = selectedCategory
+    const opts = OPTIONS_DATA[cat]
+
+    switch (cat) {
+      case 'base':
+        return (
+          <div className="char-settings-panel">
+            <h4>👤 베이스 설정</h4>
+            <div className="setting-group">
+              <label>성별</label>
+              <div className="option-buttons">
+                {(opts.gender as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.base.gender === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('base', 'gender', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>체형</label>
+              <div className="option-buttons">
+                {(opts.bodyType as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.base.bodyType === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('base', 'bodyType', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>등신</label>
+              <div className="option-buttons">
+                {(opts.height as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.base.height === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('base', 'height', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>연령대</label>
+              <div className="option-buttons">
+                {(opts.age as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.base.age === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('base', 'age', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'face':
+        return (
+          <div className="char-settings-panel">
+            <h4>👦 얼굴 설정</h4>
+            <div className="setting-group">
+              <label>스타일</label>
+              <div className="option-buttons">
+                {(opts.style as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.face.style === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('face', 'style', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>눈</label>
+              <div className="option-buttons">
+                {(opts.eyes as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.face.eyes === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('face', 'eyes', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>피부톤</label>
+              <div className="option-buttons">
+                {(opts.skinTone as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.face.skinTone === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('face', 'skinTone', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'hair':
+        return (
+          <div className="char-settings-panel">
+            <h4>💇 머리카락 설정</h4>
+            <div className="setting-group">
+              <label>스타일</label>
+              <div className="option-buttons">
+                {(opts.style as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.hair.style === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('hair', 'style', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>색상</label>
+              <div className="option-buttons">
+                {(opts.color as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.hair.color === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('hair', 'color', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'top':
+        const topItems = (opts.items as Record<string, string[]>)[character.top.category] || []
+        return (
+          <div className="char-settings-panel">
+            <h4>👕 상의 설정</h4>
+            <div className="setting-group">
+              <label>카테고리</label>
+              <div className="option-buttons">
+                {(opts.category as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.top.category === opt ? 'active' : ''}
+                    onClick={() => {
+                      updateCharacter('top', 'category', opt)
+                      const items = (OPTIONS_DATA.top.items as Record<string, string[]>)[opt]
+                      if (items && items.length > 0) {
+                        updateCharacter('top', 'item', items[0])
+                      }
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>아이템</label>
+              <div className="option-buttons">
+                {topItems.map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.top.item === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('top', 'item', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'bottom':
+        const bottomItems = (opts.items as Record<string, string[]>)[character.bottom.category] || []
+        return (
+          <div className="char-settings-panel">
+            <h4>👖 하의 설정</h4>
+            <div className="setting-group">
+              <label>카테고리</label>
+              <div className="option-buttons">
+                {(opts.category as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.bottom.category === opt ? 'active' : ''}
+                    onClick={() => {
+                      updateCharacter('bottom', 'category', opt)
+                      const items = (OPTIONS_DATA.bottom.items as Record<string, string[]>)[opt]
+                      if (items && items.length > 0) {
+                        updateCharacter('bottom', 'item', items[0])
+                      }
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>아이템</label>
+              <div className="option-buttons">
+                {bottomItems.map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.bottom.item === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('bottom', 'item', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'shoes':
+        return (
+          <div className="char-settings-panel">
+            <h4>👟 신발 설정</h4>
+            <div className="setting-group">
+              <label>신발</label>
+              <div className="option-buttons">
+                {(opts.item as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.shoes.item === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('shoes', 'item', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'accessory':
+        return (
+          <div className="char-settings-panel">
+            <h4>💍 악세서리 설정</h4>
+            <div className="setting-group">
+              <label>머리</label>
+              <div className="option-buttons">
+                {(opts.head as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.accessory.head === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('accessory', 'head', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>목</label>
+              <div className="option-buttons">
+                {(opts.neck as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.accessory.neck === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('accessory', 'neck', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>손</label>
+              <div className="option-buttons">
+                {(opts.hands as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.accessory.hands === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('accessory', 'hands', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>기타</label>
+              <div className="option-buttons">
+                {(opts.other as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.accessory.other === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('accessory', 'other', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'weapon':
+        const weaponItems =
+          character.weapon.category !== '없음'
+            ? (opts.items as Record<string, string[]>)[character.weapon.category] || []
+            : []
+        return (
+          <div className="char-settings-panel">
+            <h4>⚔️ 무기 설정</h4>
+            <div className="setting-group">
+              <label>카테고리</label>
+              <div className="option-buttons">
+                {(opts.category as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.weapon.category === opt ? 'active' : ''}
+                    onClick={() => {
+                      updateCharacter('weapon', 'category', opt)
+                      if (opt !== '없음') {
+                        const items = (OPTIONS_DATA.weapon.items as Record<string, string[]>)[opt]
+                        if (items && items.length > 0) {
+                          updateCharacter('weapon', 'item', items[0])
+                        }
+                      } else {
+                        updateCharacter('weapon', 'item', '')
+                      }
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {character.weapon.category !== '없음' && (
+              <>
+                <div className="setting-group">
+                  <label>무기</label>
+                  <div className="option-buttons">
+                    {weaponItems.map((opt) => (
+                      <button
+                        key={opt}
+                        className={character.weapon.item === opt ? 'active' : ''}
+                        onClick={() => updateCharacter('weapon', 'item', opt)}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="setting-group">
+                  <label>위치</label>
+                  <div className="option-buttons">
+                    {(opts.position as string[]).map((opt) => (
+                      <button
+                        key={opt}
+                        className={character.weapon.position === opt ? 'active' : ''}
+                        onClick={() => updateCharacter('weapon', 'position', opt)}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )
+
+      case 'pose':
+        const poseItems = (opts.poses as Record<string, string[]>)[character.pose.category] || []
+        return (
+          <div className="char-settings-panel">
+            <h4>🏃 포즈 설정</h4>
+            <div className="setting-group">
+              <label>카테고리</label>
+              <div className="option-buttons">
+                {(opts.category as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.pose.category === opt ? 'active' : ''}
+                    onClick={() => {
+                      updateCharacter('pose', 'category', opt)
+                      const poses = (OPTIONS_DATA.pose.poses as Record<string, string[]>)[opt]
+                      if (poses && poses.length > 0) {
+                        updateCharacter('pose', 'pose', poses[0])
+                      }
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>포즈</label>
+              <div className="option-buttons">
+                {poseItems.map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.pose.pose === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('pose', 'pose', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>각도</label>
+              <div className="option-buttons">
+                {(opts.angle as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.pose.angle === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('pose', 'angle', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-group">
+              <label>방향</label>
+              <div className="option-buttons">
+                {(opts.direction as string[]).map((opt) => (
+                  <button
+                    key={opt}
+                    className={character.pose.direction === opt ? 'active' : ''}
+                    onClick={() => updateCharacter('pose', 'direction', opt)}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  // ==================== 렌더링 ====================
 
   return (
-    <div ref={nodeRef} className={`ai-generator-node ${selected ? 'selected' : ''} ${hasConnections ? 'has-connections' : ''}`}>
-      <Handle type="target" position={Position.Left} id="prompt-in" />
-      <NodeResizer isVisible={selected} minWidth={300} minHeight={200} />
+    <div
+      ref={nodeRef}
+      className={`ai-generator-node-v2 ${selected ? 'selected' : ''}`}
+    >
+      <Handle type="target" position={Position.Left} id="ref-in" />
+      <NodeResizer isVisible={selected} minWidth={600} minHeight={500} />
 
-      <div className="ai-node-header">
-        <span>🤖 AI 이미지 생성기</span>
-        {hasConnections && <span className="connection-badge">🔗 {connectedSources.length}</span>}
+      {/* 헤더 */}
+      <div className="aig-header">
+        <span>🎨 캐릭터 메이커</span>
+        <div className="aig-header-actions">
+          <button
+            className={viewMode === 'character' ? 'active' : ''}
+            onClick={() => setViewMode('character')}
+          >
+            캐릭터
+          </button>
+          <button
+            className={viewMode === 'settings' ? 'active' : ''}
+            onClick={() => setViewMode('settings')}
+          >
+            ⚙️ 설정
+          </button>
+        </div>
       </div>
 
-      <div className="ai-node-content nodrag" onMouseDown={(e) => e.stopPropagation()}>
-        {hasConnections && (
-          <div className="ai-node-connections">
-            <div className="connections-title">📥 연결된 노드 ({connectedSources.length}):</div>
-            {connectedSources
-              .filter((n) => n?.type?.startsWith('prompt'))
-              .map((n, i) => (
-                <div key={`prompt-${i}`} className="connection-item prompt-connection">
-                  <span className="conn-icon">🎨</span>
-                  <span className="conn-label">{n?.type?.replace('prompt', '')}</span>
-                  <span className="conn-status">{n?.data?.combinedPrompt ? '✓' : '⚠️'}</span>
-                  {n?.data?.combinedPrompt && (
-                    <div className="conn-preview">{n.data.combinedPrompt.slice(0, 30)}...</div>
-                  )}
-                </div>
+      <div className="aig-body nodrag" onMouseDown={(e) => e.stopPropagation()}>
+        {viewMode === 'settings' ? (
+          // API 설정 뷰
+          <div className="aig-settings-view">
+            <div className="aig-field">
+              <label>API 키</label>
+              <div className="aig-input-row">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Google AI API 키 입력..."
+                />
+                <button onClick={() => setShowApiKey(!showApiKey)}>
+                  {showApiKey ? '숨김' : '보기'}
+                </button>
+              </div>
+            </div>
+            <div className="aig-field">
+              <label>모델</label>
+              <select value={model} onChange={(e) => setModel(e.target.value)}>
+                {MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="aig-field">
+              <label>초기화</label>
+              <button
+                className="aig-reset-btn"
+                onClick={() => setCharacter(DEFAULT_CHARACTER)}
+              >
+                🔄 캐릭터 초기화
+              </button>
+            </div>
+          </div>
+        ) : (
+          // 캐릭터 메이커 뷰
+          <div className="aig-character-view">
+            {/* 왼쪽: 카테고리 목록 */}
+            <div className="aig-categories">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  className={`aig-category-btn ${selectedCategory === cat.id ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(cat.id)}
+                >
+                  <span className="cat-icon">{cat.icon}</span>
+                  <span className="cat-name">{cat.name}</span>
+                </button>
               ))}
-            {connectedCharMakers.map((n, i) => (
-              <div key={`char-${i}`} className="connection-item charmaker-connection">
-                <span className="conn-icon">🎭</span>
-                <span className="conn-label">캐릭터 메이커</span>
-                <span className="conn-status">{n?.data?.combinedPrompt ? '✓' : '⚠️'}</span>
-                {n?.data?.combinedPrompt && (
-                  <div className="conn-preview">{n.data.combinedPrompt.slice(0, 30)}...</div>
-                )}
-              </div>
-            ))}
-            {connectedRefs.map((ref, i) => (
-              <div key={i} className={`connection-item ref-connection ${ref.hasImage ? 'has-image' : ''}`}>
-                <span className="conn-icon">🖼️</span>
-                <span className="conn-label">{ref.type} 참조</span>
-                <span className="conn-status">{ref.hasImage ? '✓' : '⚠️'}</span>
-              </div>
-            ))}
+            </div>
+
+            {/* 오른쪽: 설정 패널 */}
+            <div className="aig-settings-content">{renderSettingsPanel()}</div>
           </div>
         )}
 
-        <div className="ai-node-field">
-          <label>API 키</label>
-          <div className="ai-node-input-row">
-            <input
-              className="nodrag"
-              type={showApiKey ? 'text' : 'password'}
-              value={localApiKey}
-              onChange={(e) => setLocalApiKey(e.target.value)}
-              placeholder="AIza..."
-            />
-            <button onMouseDown={(e) => e.stopPropagation()} onClick={() => setShowApiKey(!showApiKey)}>
-              {showApiKey ? '숨김' : '보기'}
-            </button>
-          </div>
+        {/* 프롬프트 미리보기 */}
+        <div className="aig-prompt-preview">
+          <label>🤖 자동 생성 프롬프트</label>
+          <p>{generatedPrompt}</p>
         </div>
 
-        <div className="ai-node-field">
-          <label>모델</label>
-          <select className="nodrag" value={localModel} onChange={(e) => setLocalModel(e.target.value)}>
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        </div>
+        {/* 에러 */}
+        {error && <div className="aig-error">{error}</div>}
 
-        <div className="ai-node-field">
-          <label>추가 프롬프트</label>
-          <textarea
-            className="nodrag"
-            value={localPrompt}
-            onChange={(e) => setLocalPrompt(e.target.value)}
-            placeholder="추가 지시사항..."
-            rows={2}
-          />
-        </div>
-
-        {getFinalPrompt() && (
-          <div className="ai-node-preview">
-            <label>📝 최종 프롬프트</label>
-            <p>{getFinalPrompt()}</p>
-          </div>
-        )}
-
-        {error && <div className="ai-node-error">{error}</div>}
-
+        {/* 생성 버튼 */}
         <button
-          className="ai-node-generate-btn"
+          className="aig-generate-btn"
           onClick={handleGenerate}
-          disabled={isGenerating || !localApiKey}
-          onMouseDown={(e) => e.stopPropagation()}
+          disabled={isGenerating || !apiKey}
         >
-          {isGenerating ? '생성 중...' : '🎨 이미지 생성'}
+          {isGenerating ? '⏳ 생성 중...' : '🚀 AI 이미지 생성'}
         </button>
-
-        {!hasConnections && (
-          <div className="ai-node-help">💡 프롬프트 빌더나 참조 노드를 연결하세요</div>
-        )}
 
         {/* 생성된 이미지 갤러리 */}
         {generatedImages.length > 0 && (
-          <div className="ai-node-gallery">
-            <label>🖼️ 생성된 이미지 ({generatedImages.length})</label>
-            <div className="ai-node-gallery-grid">
+          <div className="aig-gallery">
+            <label>📸 생성 결과 ({generatedImages.length})</label>
+            <div className="aig-gallery-grid">
               {generatedImages.map((img, idx) => (
-                <div key={idx} className="ai-node-gallery-item">
+                <div key={idx} className="aig-gallery-item">
                   <img
                     src={img.url}
                     alt={`생성 ${idx + 1}`}
@@ -309,26 +837,21 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
                     title={img.prompt}
                   />
                   <button
-                    className="ai-node-download-btn"
+                    className="aig-download-btn"
                     onClick={() => {
                       const link = document.createElement('a')
                       link.href = img.url
-                      link.download = `generated-${Date.now()}.png`
+                      link.download = `character-${Date.now()}.png`
                       link.click()
                     }}
-                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     ⬇️
                   </button>
                 </div>
               ))}
             </div>
-            <button
-              className="ai-node-clear-btn"
-              onClick={() => setGeneratedImages([])}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              🗑️ 목록 비우기
+            <button className="aig-clear-btn" onClick={() => setGeneratedImages([])}>
+              🗑️ 결과 비우기
             </button>
           </div>
         )}
