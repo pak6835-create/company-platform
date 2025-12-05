@@ -135,6 +135,8 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
+  const [generateTransparent, setGenerateTransparent] = useState(true) // 투명 배경 생성 옵션
+  const [generationStatus, setGenerationStatus] = useState('')
 
   // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
   useEffect(() => {
@@ -238,6 +240,62 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     []
   )
 
+  // ==================== 투명 배경 알파 추출 (Medium 기사 방식) ====================
+
+  const extractAlpha = (whiteImageData: ImageData, blackImageData: ImageData): ImageData => {
+    const width = whiteImageData.width
+    const height = whiteImageData.height
+    const whitePixels = whiteImageData.data
+    const blackPixels = blackImageData.data
+    const result = new Uint8ClampedArray(whitePixels.length)
+
+    // 흰색(255,255,255)과 검은색(0,0,0) 사이의 거리: sqrt(255^2 + 255^2 + 255^2) ≈ 441.67
+    const bgDist = Math.sqrt(3 * 255 * 255)
+
+    for (let i = 0; i < width * height; i++) {
+      const offset = i * 4
+
+      // 흰배경 이미지의 RGB
+      const rW = whitePixels[offset]
+      const gW = whitePixels[offset + 1]
+      const bW = whitePixels[offset + 2]
+
+      // 검정배경 이미지의 RGB
+      const rB = blackPixels[offset]
+      const gB = blackPixels[offset + 1]
+      const bB = blackPixels[offset + 2]
+
+      // 두 픽셀 사이의 거리 계산
+      const pixelDist = Math.sqrt(
+        Math.pow(rW - rB, 2) +
+        Math.pow(gW - gB, 2) +
+        Math.pow(bW - bB, 2)
+      )
+
+      // 알파 계산:
+      // 픽셀이 100% 불투명이면 흑백에서 동일하게 보임 (pixelDist = 0)
+      // 픽셀이 100% 투명이면 배경과 똑같이 보임 (pixelDist = bgDist)
+      let alpha = 1 - (pixelDist / bgDist)
+      alpha = Math.max(0, Math.min(1, alpha))
+
+      // 색상 복구 (검은색 버전에서 전경색 복구)
+      // C = alpha * original, 따라서 original = C / alpha
+      let rOut = 0, gOut = 0, bOut = 0
+      if (alpha > 0.01) {
+        rOut = rB / alpha
+        gOut = gB / alpha
+        bOut = bB / alpha
+      }
+
+      result[offset] = Math.round(Math.min(255, rOut))
+      result[offset + 1] = Math.round(Math.min(255, gOut))
+      result[offset + 2] = Math.round(Math.min(255, bOut))
+      result[offset + 3] = Math.round(alpha * 255)
+    }
+
+    return new ImageData(result, width, height)
+  }
+
   // ==================== AI 이미지 생성 ====================
 
   const handleGenerate = async () => {
@@ -247,62 +305,131 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
     }
     setIsGenerating(true)
     setError('')
+    setGenerationStatus('')
 
     try {
-      // Gemini 이미지 생성 API (모든 모델 동일한 엔드포인트)
-      // 공식 문서: https://ai.google.dev/gemini-api/docs/image-generation
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-      const requestBody = {
-        contents: [{ parts: [{ text: generatedPrompt }] }],
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE']
-        },
-      }
 
-      console.log('API 요청:', { model, endpoint: endpoint.replace(apiKey, '***') })
+      // 1단계: 흰배경 이미지 생성
+      setGenerationStatus('1/3 흰배경 이미지 생성 중...')
 
-      const response = await fetch(endpoint, {
+      const whiteResponse = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: generatedPrompt }] }],
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+        }),
       })
 
-      const result = await response.json()
-      console.log('API 응답:', result)
+      const whiteResult = await whiteResponse.json()
+      if (whiteResult.error) throw new Error(whiteResult.error.message)
 
-      if (result.error) {
-        throw new Error(result.error.message || JSON.stringify(result.error))
-      }
-
-      // 응답에서 이미지 데이터 추출
-      let imageUrl: string | null = null
-      const parts = result.candidates?.[0]?.content?.parts || []
-
-      for (const part of parts) {
+      let whiteImageBase64: string | null = null
+      for (const part of whiteResult.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData?.data) {
-          const mimeType = part.inlineData.mimeType || 'image/png'
-          imageUrl = `data:${mimeType};base64,${part.inlineData.data}`
+          whiteImageBase64 = part.inlineData.data
           break
         }
       }
+      if (!whiteImageBase64) throw new Error('흰배경 이미지 생성 실패')
 
-      if (!imageUrl) {
-        // 디버깅을 위한 상세 정보
-        console.error('응답 구조:', JSON.stringify(result, null, 2))
-        throw new Error('이미지 생성 실패 - 응답에 이미지 데이터가 없습니다')
+      const whiteImageUrl = `data:image/png;base64,${whiteImageBase64}`
+
+      // 투명 배경 생성이 꺼져있으면 여기서 끝
+      if (!generateTransparent) {
+        const newImage = { url: whiteImageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
+        setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
+        emitAssetAdd({ url: whiteImageUrl, prompt: generatedPrompt, timestamp: Date.now() })
+        setGenerationStatus('✅ 완료!')
+        return
       }
 
-      const newImage = { url: imageUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
-      setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
+      // 2단계: 검정배경으로 편집 요청 (같은 이미지를 유지하면서 배경만 변경)
+      setGenerationStatus('2/3 검정배경으로 변환 중...')
 
-      emitAssetAdd({ url: imageUrl, prompt: generatedPrompt, timestamp: Date.now() })
+      const blackResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inlineData: { mimeType: 'image/png', data: whiteImageBase64 } },
+              { text: 'Change the white background to solid pure black #000000. Keep everything else exactly the same. Do not modify the character at all, only change the background color.' }
+            ]
+          }],
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+        }),
+      })
+
+      const blackResult = await blackResponse.json()
+      if (blackResult.error) throw new Error(blackResult.error.message)
+
+      let blackImageBase64: string | null = null
+      for (const part of blackResult.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData?.data) {
+          blackImageBase64 = part.inlineData.data
+          break
+        }
+      }
+      if (!blackImageBase64) throw new Error('검정배경 변환 실패')
+
+      const blackImageUrl = `data:image/png;base64,${blackImageBase64}`
+
+      // 3단계: 두 이미지 비교해서 알파 추출
+      setGenerationStatus('3/3 투명 배경 생성 중...')
+
+      const transparentUrl = await new Promise<string>((resolve, reject) => {
+        const whiteImg = new Image()
+        const blackImg = new Image()
+        let loadedCount = 0
+
+        const checkBothLoaded = () => {
+          loadedCount++
+          if (loadedCount === 2) {
+            const canvas = document.createElement('canvas')
+            canvas.width = whiteImg.width
+            canvas.height = whiteImg.height
+            const ctx = canvas.getContext('2d')!
+
+            // 흰배경 이미지 데이터
+            ctx.drawImage(whiteImg, 0, 0)
+            const whiteData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+            // 검정배경 이미지 데이터
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(blackImg, 0, 0)
+            const blackData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+            // 알파 추출
+            const resultData = extractAlpha(whiteData, blackData)
+            ctx.putImageData(resultData, 0, 0)
+
+            resolve(canvas.toDataURL('image/png'))
+          }
+        }
+
+        whiteImg.onload = checkBothLoaded
+        blackImg.onload = checkBothLoaded
+        whiteImg.onerror = () => reject(new Error('흰배경 이미지 로드 실패'))
+        blackImg.onerror = () => reject(new Error('검정배경 이미지 로드 실패'))
+
+        whiteImg.src = whiteImageUrl
+        blackImg.src = blackImageUrl
+      })
+
+      const newImage = { url: transparentUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
+      setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
+      emitAssetAdd({ url: transparentUrl, prompt: generatedPrompt, timestamp: Date.now() })
+      setGenerationStatus('✅ 투명 배경 완료!')
 
       if (data.onGenerate) {
-        data.onGenerate(imageUrl, generatedPrompt.slice(0, 30) + '...')
+        data.onGenerate(transparentUrl, generatedPrompt.slice(0, 30) + '...')
       }
     } catch (err) {
       console.error('이미지 생성 오류:', err)
       setError(err instanceof Error ? err.message : '생성 실패')
+      setGenerationStatus('')
     } finally {
       setIsGenerating(false)
     }
@@ -341,6 +468,22 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
                 </option>
               ))}
             </select>
+          </div>
+          <div className="setting-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={generateTransparent}
+                onChange={(e) => setGenerateTransparent(e.target.checked)}
+                style={{ width: 18, height: 18 }}
+              />
+              <span>🎭 투명 배경으로 생성</span>
+            </label>
+            <p style={{ fontSize: 11, color: '#888', margin: '4px 0 0 26px' }}>
+              {generateTransparent
+                ? '흰배경 → 검정배경 변환 → 알파 추출 (API 2회 호출)'
+                : '흰배경 이미지만 생성 (API 1회 호출)'}
+            </p>
           </div>
           <div className="setting-group">
             <label>캐릭터 초기화</label>
@@ -906,12 +1049,30 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
         {error && <div className="aig-error">{error}</div>}
 
         {/* 생성 버튼 */}
+        {/* 진행 상태 표시 */}
+        {generationStatus && (
+          <div style={{
+            padding: '8px 12px',
+            marginBottom: 8,
+            background: generationStatus.includes('✅') ? '#d4edda' : '#e3f2fd',
+            borderRadius: 6,
+            fontSize: 12,
+            textAlign: 'center',
+            color: generationStatus.includes('✅') ? '#155724' : '#1565c0',
+          }}>
+            {generationStatus}
+          </div>
+        )}
         <button
           className="aig-generate-btn"
           onClick={handleGenerate}
           disabled={isGenerating || !apiKey}
         >
-          {isGenerating ? '⏳ 생성 중...' : '🚀 AI 이미지 생성'}
+          {isGenerating
+            ? '⏳ 생성 중...'
+            : generateTransparent
+              ? '🎭 투명 배경 이미지 생성'
+              : '🚀 AI 이미지 생성'}
         </button>
       </div>
 
