@@ -70,16 +70,22 @@ export async function generateImage(
     }
   }
 
+  const requestBody = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig,
+  }
+
+  // 디버그 로그
+  console.log('[generateImage] 요청:', JSON.stringify(requestBody, null, 2))
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   const result = await response.json()
+  console.log('[generateImage] 응답:', result.error ? result.error : '성공')
 
   if (result.error) {
     throw new Error(result.error.message || 'API 오류')
@@ -108,21 +114,32 @@ export async function editImage(
 ): Promise<{ base64: string; url: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
+  const requestBody = {
+    contents: [{
+      parts: [
+        { inlineData: { mimeType, data: imageBase64 } },
+        { text: editPrompt }
+      ]
+    }],
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+  }
+
+  // 디버그 로그 (이미지 데이터는 생략)
+  console.log('[editImage] 요청:', {
+    model,
+    mimeType,
+    promptLength: editPrompt.length,
+    imageDataLength: imageBase64.length,
+  })
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inlineData: { mimeType, data: imageBase64 } },
-          { text: editPrompt }
-        ]
-      }],
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   const result = await response.json()
+  console.log('[editImage] 응답:', result.error ? result.error : '성공')
 
   if (result.error) {
     throw new Error(result.error.message || 'API 오류')
