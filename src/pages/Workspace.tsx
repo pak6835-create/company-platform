@@ -98,17 +98,10 @@ function WorkspaceCanvas() {
   const [showAddPanel, setShowAddPanel] = useState(false)
   const [activeTool, setActiveTool] = useState<string>('select')
   const [showAssetLibrary, setShowAssetLibrary] = useState(true)
-  const [assets, setAssets] = useState<Asset[]>(() => {
-    const saved = localStorage.getItem('workspace_assets')
-    return saved ? JSON.parse(saved) : []
-  })
+  // 어셋은 메모리에만 저장 (base64 이미지가 너무 커서 localStorage 용량 초과)
+  const [assets, setAssets] = useState<Asset[]>([])
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
-
-  // 어셋 라이브러리 저장
-  useEffect(() => {
-    localStorage.setItem('workspace_assets', JSON.stringify(assets))
-  }, [assets])
 
   // 어셋 추가 이벤트 리스너
   useEffect(() => {
@@ -117,7 +110,7 @@ function WorkspaceCanvas() {
       setAssets(prev => [
         { id: `asset-${timestamp}`, url, prompt, timestamp },
         ...prev
-      ].slice(0, 50)) // 최대 50개
+      ].slice(0, 10)) // 최대 10개로 제한 (메모리 절약)
     }
     window.addEventListener('asset-add', handleAssetAdd)
     return () => window.removeEventListener('asset-add', handleAssetAdd)

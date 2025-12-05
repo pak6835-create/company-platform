@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from 'react'
-import { NodeProps, NodeResizer, Handle, Position } from 'reactflow'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 
 // ==================== 카테고리 및 옵션 데이터 ====================
@@ -117,7 +117,9 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number })
 
 // ==================== 메인 컴포넌트 ====================
 
-export function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeData>) {
+export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNodeData>) {
+  const { setNodes } = useReactFlow()
+
   // API 설정
   const [apiKey, setApiKey] = useState(data.apiKey || '')
   const [model, setModel] = useState(data.model || MODELS[0].id)
@@ -133,6 +135,27 @@ export function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeDat
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
   const [generatedImages, setGeneratedImages] = useState<Array<{ url: string; prompt: string }>>([])
+
+  // 노드 데이터 업데이트 (후처리 노드에서 접근 가능하도록)
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              apiKey,
+              model,
+              lastGeneratedImage: generatedImages[0]?.url || null,
+              lastPrompt: generatedImages[0]?.prompt || null,
+            },
+          }
+        }
+        return n
+      })
+    )
+  }, [apiKey, model, generatedImages, id, setNodes])
 
   // ==================== 프롬프트 자동 생성 ====================
 
@@ -184,8 +207,9 @@ export function AIGeneratorNode({ data, selected }: NodeProps<AIGeneratorNodeDat
     parts.push(`${character.pose.angle} view`)
     parts.push(`looking ${character.pose.direction}`)
 
-    // 스타일
+    // 스타일 + 흰색 배경 (배경 제거를 위해)
     parts.push('webtoon style', 'clean lines', 'high quality', 'detailed')
+    parts.push('pure white background', 'solid white background', 'isolated character on white')
 
     return parts.join(', ')
   }, [character])
