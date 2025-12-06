@@ -409,8 +409,27 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
           {/* 왼쪽: 캐릭터 이미지 */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 4, fontWeight: 'bold' }}>
-              👤 캐릭터
+            <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 4, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>👤 캐릭터</span>
+              {connectedCharacter && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setConnectedCharacter(null)
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#888',
+                    cursor: 'pointer',
+                    fontSize: 10,
+                    padding: '2px 4px',
+                  }}
+                  title="이미지 삭제"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             <div
               onDrop={(e) => handleDrop(e, 'character')}
@@ -424,22 +443,20 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 e.stopPropagation()
               }}
               onClick={() => {
-                if (!connectedCharacter) {
-                  const input = document.createElement('input')
-                  input.type = 'file'
-                  input.accept = 'image/*'
-                  input.onchange = (e) => {
-                    const file = (e.target as HTMLInputElement).files?.[0]
-                    if (file) {
-                      const reader = new FileReader()
-                      reader.onload = (ev) => {
-                        setConnectedCharacter(ev.target?.result as string)
-                      }
-                      reader.readAsDataURL(file)
+                const input = document.createElement('input')
+                input.type = 'file'
+                input.accept = 'image/*'
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0]
+                  if (file) {
+                    const reader = new FileReader()
+                    reader.onload = (ev) => {
+                      setConnectedCharacter(ev.target?.result as string)
                     }
+                    reader.readAsDataURL(file)
                   }
-                  input.click()
                 }
+                input.click()
               }}
               style={{
                 border: '2px dashed #f59e0b',
@@ -468,7 +485,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 />
               ) : (
                 <div style={{ fontSize: 10, color: '#888' }}>
-                  연결 또는 업로드
+                  클릭/드롭하여 업로드
                 </div>
               )}
             </div>

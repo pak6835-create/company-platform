@@ -23,7 +23,7 @@ export function ImageNode({ data, selected, id }: NodeProps<ImageNodeData>) {
   return (
     <div
       className={`image-node ${selected ? 'selected' : ''}`}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', width: '100%', height: '100%' }}
     >
       <NodeResizer
         isVisible={selected}
