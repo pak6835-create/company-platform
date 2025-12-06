@@ -183,6 +183,9 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   const [resolution, setResolution] = useState('2K') // 해상도 (대문자 K)
   const [aspectRatio, setAspectRatio] = useState('1:1') // 종횡비 (캐릭터는 정사각형 추천)
   const [copied, setCopied] = useState(false) // 프롬프트 복사 상태
+  // 직접 프롬프트 입력 모드
+  const [useCustomPrompt, setUseCustomPrompt] = useState(false)
+  const [customPrompt, setCustomPrompt] = useState('')
 
   // 노드 데이터 업데이트 (API 키와 모델만 저장 - 이미지는 메모리에만)
   useEffect(() => {
@@ -335,9 +338,24 @@ Important: Only ONE character, full body clearly visible, white background only.
       setError('⚙️ 설정에서 API 키를 입력하세요')
       return
     }
+
+    // 직접 프롬프트 모드일 때 유효성 검사
+    if (useCustomPrompt && !customPrompt.trim()) {
+      setError('⚠️ 프롬프트를 입력하세요')
+      return
+    }
+
     setIsGenerating(true)
     setError('')
     setGenerationStatus('')
+
+    // 최종 프롬프트 결정 (직접 입력 또는 자동 생성)
+    let finalPrompt = useCustomPrompt ? customPrompt.trim() : generatedPrompt
+
+    // 직접 프롬프트 모드에서 투명 배경 선택 시 흰배경 지시 추가
+    if (useCustomPrompt && generateTransparent) {
+      finalPrompt += '\n\nBackground: solid pure white #FFFFFF, no shadows, no gradients, clean isolated subject.'
+    }
 
     try {
       // 1단계: 흰배경 이미지 생성 (해상도/종횡비 옵션 포함)
@@ -346,13 +364,13 @@ Important: Only ONE character, full body clearly visible, white background only.
         aspectRatio: aspectRatio as AspectRatio,
         imageSize: resolution as ImageSize,
       }
-      const whiteResult = await generateImage(apiKey, generatedPrompt, model, imageOptions)
+      const whiteResult = await generateImage(apiKey, finalPrompt, model, imageOptions)
 
       // 투명 배경 생성이 꺼져있으면 여기서 끝
       if (!generateTransparent) {
-        const newImage = { url: whiteResult.url, prompt: generatedPrompt.slice(0, 50) + '...' }
+        const newImage = { url: whiteResult.url, prompt: finalPrompt.slice(0, 50) + '...' }
         setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
-        emitAssetAdd({ url: whiteResult.url, prompt: generatedPrompt, timestamp: Date.now() })
+        emitAssetAdd({ url: whiteResult.url, prompt: finalPrompt, timestamp: Date.now() })
         setGenerationStatus('✅ 완료!')
         return
       }
@@ -379,13 +397,13 @@ Important: Only ONE character, full body clearly visible, white background only.
       const resultData = extractAlpha(whiteData, blackData)
       const transparentUrl = imageDataToUrl(resultData)
 
-      const newImage = { url: transparentUrl, prompt: generatedPrompt.slice(0, 50) + '...' }
+      const newImage = { url: transparentUrl, prompt: finalPrompt.slice(0, 50) + '...' }
       setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
-      emitAssetAdd({ url: transparentUrl, prompt: generatedPrompt, timestamp: Date.now() })
+      emitAssetAdd({ url: transparentUrl, prompt: finalPrompt, timestamp: Date.now() })
       setGenerationStatus('✅ 투명 배경 완료!')
 
       if (data.onGenerate) {
-        data.onGenerate(transparentUrl, generatedPrompt.slice(0, 30) + '...')
+        data.onGenerate(transparentUrl, finalPrompt.slice(0, 30) + '...')
       }
     } catch (err) {
       console.error('이미지 생성 오류:', err)
@@ -441,6 +459,41 @@ Important: Only ONE character, full body clearly visible, white background only.
                 ? '흰배경 → 검정배경 변환 → 알파 추출 (API 2회 호출)'
                 : '흰배경 이미지만 생성 (API 1회 호출)'}
             </p>
+          </div>
+          <div className="setting-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={useCustomPrompt}
+                onChange={(e) => setUseCustomPrompt(e.target.checked)}
+                style={{ width: 18, height: 18 }}
+              />
+              <span>✏️ 직접 프롬프트 입력</span>
+            </label>
+            <p style={{ fontSize: 11, color: '#888', margin: '4px 0 0 26px' }}>
+              {useCustomPrompt
+                ? '캐릭터 설정 대신 직접 프롬프트를 입력합니다'
+                : '캐릭터 설정으로 자동 프롬프트 생성'}
+            </p>
+            {useCustomPrompt && (
+              <textarea
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                placeholder="생성할 이미지를 설명하세요... (예: A cute anime girl with pink hair, wearing a school uniform)"
+                style={{
+                  width: '100%',
+                  height: 120,
+                  marginTop: 8,
+                  padding: 10,
+                  borderRadius: 6,
+                  border: '1px solid #ddd',
+                  resize: 'vertical',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  fontFamily: 'inherit',
+                }}
+              />
+            )}
           </div>
           <div className="setting-group">
             <label>📐 해상도</label>

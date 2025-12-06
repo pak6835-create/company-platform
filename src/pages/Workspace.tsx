@@ -85,6 +85,18 @@ interface AssetCategory {
   color: string
 }
 
+// 컨텍스트 메뉴 타입
+interface ContextMenu {
+  x: number
+  y: number
+  type: 'canvas' | 'node'
+  nodeId?: string
+  nodeData?: {
+    imageUrl?: string
+    prompt?: string
+  }
+}
+
 function WorkspaceCanvas() {
   const navigate = useNavigate()
   const {
@@ -107,6 +119,8 @@ function WorkspaceCanvas() {
   const [activeTool, setActiveTool] = useState<string>('select')
   const [showAssetLibrary, setShowAssetLibrary] = useState(true)
   const [libraryWidth, setLibraryWidth] = useState(240) // 라이브러리 가로폭
+  // 컨텍스트 메뉴 상태
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   // 어셋은 메모리에만 저장 (base64 이미지가 너무 커서 localStorage 용량 초과)
   const [assets, setAssets] = useState<Asset[]>([])
   // 어셋 카테고리 목록
@@ -528,6 +542,169 @@ function WorkspaceCanvas() {
     setEdges((eds) => eds.filter((e) => !e.selected))
   }, [setNodes, setEdges])
 
+  // 캔버스 우클릭 핸들러
+  const onPaneContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault()
+      if (!reactFlowWrapper.current) return
+
+      const bounds = reactFlowWrapper.current.getBoundingClientRect()
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      })
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        type: 'canvas',
+        nodeData: { imageUrl: undefined, prompt: undefined },
+      })
+    },
+    [reactFlowInstance]
+  )
+
+  // 노드 우클릭 핸들러
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        type: 'node',
+        nodeId: node.id,
+        nodeData: {
+          imageUrl: node.data?.imageUrl || node.data?.resultImage || node.data?.generatedImage,
+          prompt: node.data?.prompt || node.data?.label,
+        },
+      })
+    },
+    []
+  )
+
+  // 컨텍스트 메뉴 닫기
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
+  // 노드 삭제 (컨텍스트 메뉴)
+  const handleContextMenuDelete = useCallback(() => {
+    if (contextMenu?.nodeId) {
+      setNodes((nds) => nds.filter((n) => n.id !== contextMenu.nodeId))
+      setEdges((eds) => eds.filter((e) => e.source !== contextMenu.nodeId && e.target !== contextMenu.nodeId))
+    }
+    closeContextMenu()
+  }, [contextMenu, setNodes, setEdges, closeContextMenu])
+
+  // 라이브러리에 추가 (컨텍스트 메뉴)
+  const handleAddToLibrary = useCallback(() => {
+    if (contextMenu?.nodeData?.imageUrl) {
+      setAssets(prev => [{
+        id: `asset-${Date.now()}`,
+        url: contextMenu.nodeData!.imageUrl!,
+        prompt: contextMenu.nodeData?.prompt || '화이트보드에서 추가',
+        timestamp: Date.now(),
+        category: selectedCategory === 'default' ? 'default' : selectedCategory
+      }, ...prev].slice(0, 50))
+    }
+    closeContextMenu()
+  }, [contextMenu, selectedCategory, closeContextMenu])
+
+  // 프롬프트 복사 (컨텍스트 메뉴)
+  const handleCopyPrompt = useCallback(() => {
+    if (contextMenu?.nodeData?.prompt) {
+      navigator.clipboard.writeText(contextMenu.nodeData.prompt)
+        .then(() => {
+          // 복사 성공 알림 (간단히 console.log)
+          console.log('프롬프트가 복사되었습니다:', contextMenu.nodeData?.prompt)
+        })
+        .catch((err) => {
+          console.error('복사 실패:', err)
+        })
+    }
+    closeContextMenu()
+  }, [contextMenu, closeContextMenu])
+
+  // 캔버스에 노드 추가 (컨텍스트 메뉴)
+  const handleContextMenuAddNode = useCallback((nodeType: string) => {
+    if (!reactFlowWrapper.current || !contextMenu) return
+
+    const bounds = reactFlowWrapper.current.getBoundingClientRect()
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: contextMenu.x - bounds.left,
+      y: contextMenu.y - bounds.top,
+    })
+
+    let newNode: Node
+
+    switch (nodeType) {
+      case 'aiGenerator':
+        newNode = {
+          id: getNewNodeId(),
+          type: 'aiGenerator',
+          position,
+          data: {
+            onGenerate: (imageUrl: string, label: string) => {
+              addImageToCanvas(imageUrl, label)
+            },
+          },
+          style: { width: 900, height: 700 },
+        }
+        break
+      case 'note':
+        newNode = {
+          id: getNewNodeId(),
+          type: 'note',
+          position,
+          data: { content: '새 노트\n\n더블클릭하여 편집', backgroundColor: '#fef3c7' },
+          style: { width: 200, height: 150 },
+        }
+        break
+      case 'text':
+        newNode = {
+          id: getNewNodeId(),
+          type: 'text',
+          position,
+          data: { text: '텍스트를 입력하세요', fontSize: 16, color: '#374151' },
+          style: { width: 150, height: 50 },
+        }
+        break
+      case 'transparentBg':
+        newNode = {
+          id: getNewNodeId(),
+          type: 'transparentBg',
+          position,
+          data: {},
+          style: { width: 400, height: 580 },
+        }
+        break
+      case 'poseChange':
+        newNode = {
+          id: getNewNodeId(),
+          type: 'poseChange',
+          position,
+          data: {},
+          style: { width: 440, height: 650 },
+        }
+        break
+      default:
+        closeContextMenu()
+        return
+    }
+
+    setNodes((nds) => [...nds, newNode])
+    closeContextMenu()
+  }, [contextMenu, reactFlowInstance, getNewNodeId, addImageToCanvas, setNodes, closeContextMenu])
+
+  // 전역 클릭 시 컨텍스트 메뉴 닫기
+  useEffect(() => {
+    const handleClick = () => closeContextMenu()
+    window.addEventListener('click', handleClick)
+    return () => window.removeEventListener('click', handleClick)
+  }, [closeContextMenu])
+
   const breadcrumbs = getBreadcrumbs()
 
   return (
@@ -796,6 +973,8 @@ function WorkspaceCanvas() {
           onDragOver={onDragOver}
           onDrop={onDrop}
           onNodeDoubleClick={onNodeDoubleClick}
+          onPaneContextMenu={onPaneContextMenu}
+          onNodeContextMenu={onNodeContextMenu}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
@@ -809,6 +988,94 @@ function WorkspaceCanvas() {
           <MiniMap />
         </ReactFlow>
       </div>
+
+      {/* 컨텍스트 메뉴 */}
+      {contextMenu && (
+        <div
+          className="context-menu"
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 1000,
+            background: '#1a1a2e',
+            border: '1px solid #444',
+            borderRadius: 8,
+            padding: 4,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            minWidth: 160,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.type === 'canvas' ? (
+            // 캔버스 우클릭 메뉴
+            <>
+              <div
+                className="context-menu-item"
+                onClick={() => handleContextMenuAddNode('aiGenerator')}
+              >
+                🎨 캐릭터 메이커
+              </div>
+              <div
+                className="context-menu-item"
+                onClick={() => handleContextMenuAddNode('transparentBg')}
+              >
+                🎭 투명 배경 생성기
+              </div>
+              <div
+                className="context-menu-item"
+                onClick={() => handleContextMenuAddNode('poseChange')}
+              >
+                🕺 포즈 변경
+              </div>
+              <div className="context-menu-divider" />
+              <div
+                className="context-menu-item"
+                onClick={() => handleContextMenuAddNode('note')}
+              >
+                📝 노트
+              </div>
+              <div
+                className="context-menu-item"
+                onClick={() => handleContextMenuAddNode('text')}
+              >
+                📄 텍스트
+              </div>
+            </>
+          ) : (
+            // 노드 우클릭 메뉴
+            <>
+              {contextMenu.nodeData?.imageUrl && (
+                <>
+                  <div
+                    className="context-menu-item"
+                    onClick={handleAddToLibrary}
+                  >
+                    📚 라이브러리에 추가
+                  </div>
+                </>
+              )}
+              {contextMenu.nodeData?.prompt && (
+                <div
+                  className="context-menu-item"
+                  onClick={handleCopyPrompt}
+                >
+                  📋 프롬프트 복사
+                </div>
+              )}
+              {(contextMenu.nodeData?.imageUrl || contextMenu.nodeData?.prompt) && (
+                <div className="context-menu-divider" />
+              )}
+              <div
+                className="context-menu-item context-menu-delete"
+                onClick={handleContextMenuDelete}
+              >
+                🗑️ 삭제
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 오른쪽 라이브러리 사이드바 */}
       <div

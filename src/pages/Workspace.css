@@ -4683,3 +4683,29 @@
 .aig-generate-btn:disabled {
   animation: pulse 1.5s ease-in-out infinite;
 }
+
+
+/* ==================== 컨텍스트 메뉴 ==================== */
+
+.context-menu-item {
+  padding: 8px 12px;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+.context-menu-item:hover {
+  background: rgba(139, 92, 246, 0.3);
+}
+
+.context-menu-delete:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #444;
+  margin: 4px 0;
+}

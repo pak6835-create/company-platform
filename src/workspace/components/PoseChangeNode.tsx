@@ -49,7 +49,9 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
   // 노드 연결 이미지와 업로드 이미지를 분리
   const [connectedImage, setConnectedImage] = useState<string | null>(null)
   const [uploadedCharacter, setUploadedCharacter] = useState<string | null>(null)
-  const [poseImage, setPoseImage] = useState<string | null>(null)
+  // 포즈 이미지도 노드 연결과 업로드 분리
+  const [connectedPose, setConnectedPose] = useState<string | null>(null)
+  const [uploadedPose, setUploadedPose] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [resultImage, setResultImage] = useState<string | null>(null)
@@ -62,6 +64,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
 
   // 실제 사용할 캐릭터 이미지 (업로드 우선, 없으면 노드 연결)
   const characterImage = uploadedCharacter || connectedImage
+  // 실제 사용할 포즈 이미지 (업로드 우선, 없으면 노드 연결)
+  const poseImage = uploadedPose || connectedPose
 
   // API 키 저장
   useEffect(() => {
@@ -96,6 +100,32 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
     }
   }, [edges, nodes, id])
 
+  // 연결된 포즈 노드에서 이미지 가져오기
+  useEffect(() => {
+    if (!Array.isArray(edges) || !Array.isArray(nodes)) return
+
+    const incomingEdge = edges.find(
+      (edge) => edge.target === id && edge.targetHandle === 'pose-in'
+    )
+
+    if (incomingEdge) {
+      const sourceNode = nodes.find((n) => n.id === incomingEdge.source)
+      if (sourceNode) {
+        const imageUrl = sourceNode.data?.imageUrl ||
+                        sourceNode.data?.url ||
+                        sourceNode.data?.resultImage ||
+                        sourceNode.data?.generatedImage
+        if (imageUrl) {
+          setConnectedPose(imageUrl)
+          // 노드 연결 시 업로드 이미지 삭제
+          setUploadedPose(null)
+        }
+      }
+    } else {
+      setConnectedPose(null)
+    }
+  }, [edges, nodes, id])
+
   // 캐릭터 업로드 시 노드 연결 끊기
   const handleCharacterUpload = (imageUrl: string) => {
     setUploadedCharacter(imageUrl)
@@ -107,18 +137,26 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
     setProgress(0)
   }
 
-  // 포즈 이미지 업로드
-  const handlePoseUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 포즈 업로드 시 노드 연결 끊기
+  const handlePoseUpload = (imageUrl: string) => {
+    setUploadedPose(imageUrl)
+    // 노드 연결 끊기
+    setEdges((eds) => eds.filter((e) => !(e.target === id && e.targetHandle === 'pose-in')))
+    setConnectedPose(null)
+    setResultImage(null)
+    setStatusText('')
+    setProgress(0)
+  }
+
+  // 파일 입력에서 포즈 이미지 업로드
+  const handlePoseFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     const reader = new FileReader()
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string
-      setPoseImage(dataUrl)
-      setResultImage(null)
-      setStatusText('')
-      setProgress(0)
+      handlePoseUpload(dataUrl)
     }
     reader.readAsDataURL(file)
   }
@@ -135,10 +173,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         const parsed = JSON.parse(jsonData)
         if (parsed.type === 'asset' && parsed.url) {
           if (target === 'pose') {
-            setPoseImage(parsed.url)
-            setResultImage(null)
-            setStatusText('')
-            setProgress(0)
+            // 포즈 드롭 시 노드 연결 끊기
+            handlePoseUpload(parsed.url)
           } else {
             // 캐릭터 드롭 시 노드 연결 끊기
             handleCharacterUpload(parsed.url)
@@ -157,10 +193,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string
         if (target === 'pose') {
-          setPoseImage(dataUrl)
-          setResultImage(null)
-          setStatusText('')
-          setProgress(0)
+          // 포즈 드롭 시 노드 연결 끊기
+          handlePoseUpload(dataUrl)
         } else {
           // 캐릭터 드롭 시 노드 연결 끊기
           handleCharacterUpload(dataUrl)
@@ -516,8 +550,31 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
 
           {/* 오른쪽: 포즈 이미지 */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: '#10b981', marginBottom: 4, fontWeight: 'bold' }}>
-              🕺 포즈 참조
+            <div style={{ fontSize: 11, color: '#10b981', marginBottom: 4, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🕺 포즈 참조 {connectedPose ? '(노드 연결)' : uploadedPose ? '(업로드)' : ''}</span>
+              {poseImage && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // 업로드 이미지 삭제
+                    setUploadedPose(null)
+                    // 노드 연결도 끊기
+                    setEdges((eds) => eds.filter((edge) => !(edge.target === id && edge.targetHandle === 'pose-in')))
+                    setConnectedPose(null)
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#888',
+                    cursor: 'pointer',
+                    fontSize: 10,
+                    padding: '2px 4px',
+                  }}
+                  title="이미지 삭제"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             <div
               onClick={() => poseInputRef.current?.click()}
@@ -532,7 +589,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 e.stopPropagation()
               }}
               style={{
-                border: '2px dashed #10b981',
+                border: `2px dashed ${connectedPose ? '#10b981' : '#10b981'}`,
                 borderRadius: 6,
                 padding: 6,
                 textAlign: 'center',
@@ -558,14 +615,14 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 />
               ) : (
                 <div style={{ fontSize: 10, color: '#888' }}>
-                  클릭하여 업로드
+                  클릭/드롭하여 업로드
                 </div>
               )}
               <input
                 ref={poseInputRef}
                 type="file"
                 accept="image/*"
-                onChange={handlePoseUpload}
+                onChange={handlePoseFileUpload}
                 style={{ display: 'none' }}
               />
             </div>
@@ -575,7 +632,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         {/* 처리 버튼 */}
         <button
           onClick={handleProcess}
-          disabled={isProcessing || !apiKey || !connectedCharacter || !poseImage}
+          disabled={isProcessing || !apiKey || !characterImage || !poseImage}
           style={{
             width: '100%',
             padding: '10px',
@@ -693,13 +750,26 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         )}
       </div>
 
-      {/* 핸들 - 캐릭터 입력 (왼쪽) */}
+      {/* 핸들 - 캐릭터 입력 (왼쪽 상단) */}
       <Handle
         type="target"
         position={Position.Left}
         id="character-in"
         style={{
+          top: '30%',
           background: '#f59e0b',
+          width: 12,
+          height: 12,
+        }}
+      />
+      {/* 핸들 - 포즈 입력 (왼쪽 하단) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="pose-in"
+        style={{
+          top: '60%',
+          background: '#10b981',
           width: 12,
           height: 12,
         }}
