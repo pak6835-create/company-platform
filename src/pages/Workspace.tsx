@@ -328,7 +328,7 @@ function WorkspaceCanvas() {
   // 드래그 앤 드롭
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
+    event.dataTransfer.dropEffect = 'copy'
   }, [])
 
   const onDrop = useCallback(
@@ -342,6 +342,28 @@ function WorkspaceCanvas() {
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       })
+
+      // 로컬 파일 드롭 처리
+      const files = event.dataTransfer.files
+      if (files && files.length > 0) {
+        const file = files[0]
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader()
+          reader.onload = (e) => {
+            const dataUrl = e.target?.result as string
+            const newNode: Node = {
+              id: getNewNodeId(),
+              type: 'image',
+              position,
+              data: { imageUrl: dataUrl, label: file.name.slice(0, 20) || '업로드 이미지' },
+              style: { width: 200, height: 200 },
+            }
+            setNodes((nds) => [...nds, newNode])
+          }
+          reader.readAsDataURL(file)
+          return
+        }
+      }
 
       // 어셋 드래그앤드롭 처리 (application/json 또는 text/plain)
       const assetData = event.dataTransfer.getData('application/json') || event.dataTransfer.getData('text/plain')
