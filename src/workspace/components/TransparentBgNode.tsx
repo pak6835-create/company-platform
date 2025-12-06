@@ -374,7 +374,15 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
           <div
             onClick={() => !connectedImage && fileInputRef.current?.click()}
             onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              e.dataTransfer.dropEffect = 'copy'
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
             style={{
               border: `2px dashed ${connectedImage ? '#10b981' : '#667eea'}`,
               borderRadius: 6,

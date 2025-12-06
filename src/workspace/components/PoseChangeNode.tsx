@@ -414,7 +414,15 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
             </div>
             <div
               onDrop={(e) => handleDrop(e, 'character')}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                e.dataTransfer.dropEffect = 'copy'
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
               onClick={() => {
                 if (!connectedCharacter) {
                   const input = document.createElement('input')
@@ -474,7 +482,15 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
             <div
               onClick={() => poseInputRef.current?.click()}
               onDrop={(e) => handleDrop(e, 'pose')}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                e.dataTransfer.dropEffect = 'copy'
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
               style={{
                 border: '2px dashed #10b981',
                 borderRadius: 6,
