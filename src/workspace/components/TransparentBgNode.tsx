@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
-import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, AspectRatio, ImageSize } from '../utils/geminiApi'
+import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, ImageSize } from '../utils/geminiApi'
 
 /**
  * 이미지 배경 투명화 노드
@@ -21,13 +21,6 @@ const RESOLUTION_OPTIONS = [
   { id: '1K', name: '1K' },
   { id: '2K', name: '2K' },
   { id: '4K', name: '4K' },
-]
-
-// 종횡비 옵션
-const ASPECT_RATIO_OPTIONS = [
-  { id: '16:9', name: '16:9' },
-  { id: '1:1', name: '1:1' },
-  { id: '9:16', name: '9:16' },
 ]
 
 // 어셋 라이브러리 이벤트
@@ -52,7 +45,6 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
 
   // 옵션 상태
   const [resolution, setResolution] = useState<ImageSize>('2K')
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
 
   // 실제 사용할 이미지 (업로드 우선, 없으면 노드 연결)
   const sourceImage = uploadedImage || connectedImage
@@ -180,7 +172,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
         model,
         mimeType,
         undefined,
-        { aspectRatio, imageSize: resolution }
+        { imageSize: resolution }
       )
       setProgress(40)
 
@@ -193,7 +185,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
         model,
         'image/png',
         undefined,
-        { aspectRatio, imageSize: resolution }
+        { imageSize: resolution }
       )
       setProgress(75)
 
@@ -275,9 +267,9 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
           border: '1px solid #444',
         }}>
           {/* 해상도 옵션 */}
-          <div style={{ marginBottom: 10 }}>
+          <div>
             <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>
-              📐 해상도
+              📐 해상도 (업스케일)
             </label>
             <div style={{ display: 'flex', gap: 4 }}>
               {RESOLUTION_OPTIONS.map((res) => (
@@ -297,34 +289,6 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
                   }}
                 >
                   {res.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 종횡비 옵션 */}
-          <div>
-            <label style={{ fontSize: 11, color: '#aaa', display: 'block', marginBottom: 4 }}>
-              📏 종횡비
-            </label>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {ASPECT_RATIO_OPTIONS.map((ar) => (
-                <button
-                  key={ar.id}
-                  onClick={() => setAspectRatio(ar.id as AspectRatio)}
-                  style={{
-                    flex: 1,
-                    padding: '5px 8px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: aspectRatio === ar.id ? '#667eea' : '#3f3f46',
-                    color: aspectRatio === ar.id ? '#fff' : '#fff',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: aspectRatio === ar.id ? 'bold' : 'normal',
-                  }}
-                >
-                  {ar.name}
                 </button>
               ))}
             </div>

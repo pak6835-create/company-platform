@@ -241,7 +241,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
       const result = await editImage(
         apiKey,
         characterBase64,
-        `Look at the second reference image showing a pose. Redraw the character from the first image in that exact pose from the reference. Keep the character's appearance, clothing, and style exactly the same. Only change the pose to match the reference pose image. Maintain the same art style and quality. ${bgInstruction}`,
+        `Look at the second reference image showing a pose. Redraw the character from the first image in that exact pose and camera angle from the reference. Keep the character's appearance, clothing, and style exactly the same. Match both the pose AND the viewing angle (camera perspective, eye level, angle of view) from the reference pose image. Maintain the same art style and quality. ${bgInstruction}`,
         model,
         'image/png',
         poseBase64,
