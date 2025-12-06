@@ -37,15 +37,18 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number; c
 }
 
 export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeData>) {
-  const { setNodes } = useReactFlow()
+  const { setNodes, setEdges } = useReactFlow()
   const edges = useStore((state) => state.edges) || []
   const nodes = useStore((state) => state.getNodes()) || []
 
   const poseInputRef = useRef<HTMLInputElement>(null)
+  const characterInputRef = useRef<HTMLInputElement>(null)
 
   const [apiKey, setApiKey] = useState(data.apiKey || '')
   const [showApiKey, setShowApiKey] = useState(false)
-  const [connectedCharacter, setConnectedCharacter] = useState<string | null>(data.characterImage || null)
+  // 노드 연결 이미지와 업로드 이미지를 분리
+  const [connectedImage, setConnectedImage] = useState<string | null>(null)
+  const [uploadedCharacter, setUploadedCharacter] = useState<string | null>(null)
   const [poseImage, setPoseImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
@@ -56,6 +59,9 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
   const [generateTransparent, setGenerateTransparent] = useState(true)
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
+
+  // 실제 사용할 캐릭터 이미지 (업로드 우선, 없으면 노드 연결)
+  const characterImage = uploadedCharacter || connectedImage
 
   // API 키 저장
   useEffect(() => {
@@ -80,16 +86,26 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                         sourceNode.data?.resultImage ||
                         sourceNode.data?.generatedImage
         if (imageUrl) {
-          setConnectedCharacter(imageUrl)
-          setNodes((nds) =>
-            nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, characterImage: imageUrl } } : n))
-          )
+          setConnectedImage(imageUrl)
+          // 노드 연결 시 업로드 이미지 삭제
+          setUploadedCharacter(null)
         }
       }
     } else {
-      setConnectedCharacter(null)
+      setConnectedImage(null)
     }
-  }, [edges, nodes, id, setNodes])
+  }, [edges, nodes, id])
+
+  // 캐릭터 업로드 시 노드 연결 끊기
+  const handleCharacterUpload = (imageUrl: string) => {
+    setUploadedCharacter(imageUrl)
+    // 노드 연결 끊기
+    setEdges((eds) => eds.filter((e) => !(e.target === id && e.targetHandle === 'character-in')))
+    setConnectedImage(null)
+    setResultImage(null)
+    setStatusText('')
+    setProgress(0)
+  }
 
   // 포즈 이미지 업로드
   const handlePoseUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,12 +136,13 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         if (parsed.type === 'asset' && parsed.url) {
           if (target === 'pose') {
             setPoseImage(parsed.url)
+            setResultImage(null)
+            setStatusText('')
+            setProgress(0)
           } else {
-            setConnectedCharacter(parsed.url)
+            // 캐릭터 드롭 시 노드 연결 끊기
+            handleCharacterUpload(parsed.url)
           }
-          setResultImage(null)
-          setStatusText('')
-          setProgress(0)
           return
         }
       } catch (err) {
@@ -141,12 +158,13 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
         const dataUrl = event.target?.result as string
         if (target === 'pose') {
           setPoseImage(dataUrl)
+          setResultImage(null)
+          setStatusText('')
+          setProgress(0)
         } else {
-          setConnectedCharacter(dataUrl)
+          // 캐릭터 드롭 시 노드 연결 끊기
+          handleCharacterUpload(dataUrl)
         }
-        setResultImage(null)
-        setStatusText('')
-        setProgress(0)
       }
       reader.readAsDataURL(file)
     }
@@ -158,7 +176,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
       setStatusText('⚠️ API 키를 입력하세요')
       return
     }
-    if (!connectedCharacter) {
+    if (!characterImage) {
       setStatusText('⚠️ 캐릭터 이미지를 연결하거나 업로드하세요')
       return
     }
@@ -173,7 +191,7 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
     setStatusText('🎭 포즈 변경 중...')
 
     try {
-      const characterBase64 = connectedCharacter.split(',')[1]
+      const characterBase64 = characterImage.split(',')[1]
       const poseBase64 = poseImage.split(',')[1]
       const model = MODELS[0].id
 
@@ -410,12 +428,16 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
           {/* 왼쪽: 캐릭터 이미지 */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 4, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>👤 캐릭터</span>
-              {connectedCharacter && (
+              <span>👤 캐릭터 {connectedImage ? '(노드 연결)' : uploadedCharacter ? '(업로드)' : ''}</span>
+              {characterImage && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    setConnectedCharacter(null)
+                    // 업로드 이미지 삭제
+                    setUploadedCharacter(null)
+                    // 노드 연결도 끊기
+                    setEdges((eds) => eds.filter((edge) => !(edge.target === id && edge.targetHandle === 'character-in')))
+                    setConnectedImage(null)
                   }}
                   style={{
                     background: 'transparent',
@@ -451,7 +473,8 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                   if (file) {
                     const reader = new FileReader()
                     reader.onload = (ev) => {
-                      setConnectedCharacter(ev.target?.result as string)
+                      // 업로드 시 노드 연결 끊기
+                      handleCharacterUpload(ev.target?.result as string)
                     }
                     reader.readAsDataURL(file)
                   }
@@ -459,12 +482,12 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 input.click()
               }}
               style={{
-                border: '2px dashed #f59e0b',
+                border: `2px dashed ${connectedImage ? '#10b981' : '#f59e0b'}`,
                 borderRadius: 6,
                 padding: 6,
                 textAlign: 'center',
                 cursor: 'pointer',
-                background: connectedCharacter ? 'transparent' : '#2a2a3e',
+                background: characterImage ? 'transparent' : '#2a2a3e',
                 minHeight: 80,
                 display: 'flex',
                 alignItems: 'center',
@@ -472,9 +495,9 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
                 overflow: 'hidden',
               }}
             >
-              {connectedCharacter ? (
+              {characterImage ? (
                 <img
-                  src={connectedCharacter}
+                  src={characterImage}
                   alt="character"
                   style={{
                     maxWidth: '100%',

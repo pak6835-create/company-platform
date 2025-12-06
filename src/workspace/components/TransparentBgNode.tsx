@@ -36,7 +36,7 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number })
 }
 
 export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentBgNodeData>) {
-  const { setNodes } = useReactFlow()
+  const { setNodes, setEdges } = useReactFlow()
   const edges = useStore((state) => state.edges) || []
   const nodes = useStore((state) => state.getNodes()) || []
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -44,7 +44,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
   const [apiKey, setApiKey] = useState(data.apiKey || '')
   const [showApiKey, setShowApiKey] = useState(false)
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
-  const [connectedImage, setConnectedImage] = useState<string | null>(data.connectedImage || null)
+  const [connectedImage, setConnectedImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [transparentImage, setTransparentImage] = useState<string | null>(null)
@@ -53,6 +53,9 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
   // 옵션 상태
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
+
+  // 실제 사용할 이미지 (업로드 우선, 없으면 노드 연결)
+  const sourceImage = uploadedImage || connectedImage
 
   // API 키 저장
   useEffect(() => {
@@ -78,15 +81,25 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
                         sourceNode.data?.generatedImage
         if (imageUrl) {
           setConnectedImage(imageUrl)
-          setNodes((nds) =>
-            nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, connectedImage: imageUrl } } : n))
-          )
+          // 노드 연결 시 업로드 이미지 삭제
+          setUploadedImage(null)
         }
       }
     } else {
       setConnectedImage(null)
     }
-  }, [edges, nodes, id, setNodes])
+  }, [edges, nodes, id])
+
+  // 이미지 업로드 시 노드 연결 끊기
+  const handleImageUpload = (imageUrl: string) => {
+    setUploadedImage(imageUrl)
+    // 노드 연결 끊기
+    setEdges((eds) => eds.filter((e) => !(e.target === id && e.targetHandle === 'image-in')))
+    setConnectedImage(null)
+    setTransparentImage(null)
+    setStatusText('')
+    setProgress(0)
+  }
 
   // 파일 업로드 처리
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,10 +109,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     const reader = new FileReader()
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string
-      setUploadedImage(dataUrl)
-      setTransparentImage(null)
-      setStatusText('')
-      setProgress(0)
+      handleImageUpload(dataUrl)
     }
     reader.readAsDataURL(file)
   }
@@ -115,10 +125,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       try {
         const parsed = JSON.parse(jsonData)
         if (parsed.type === 'asset' && parsed.url) {
-          setUploadedImage(parsed.url)
-          setTransparentImage(null)
-          setStatusText('')
-          setProgress(0)
+          // 드롭 시 노드 연결 끊기
+          handleImageUpload(parsed.url)
           return
         }
       } catch (err) {
@@ -132,17 +140,12 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
       const reader = new FileReader()
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string
-        setUploadedImage(dataUrl)
-        setTransparentImage(null)
-        setStatusText('')
-        setProgress(0)
+        // 드롭 시 노드 연결 끊기
+        handleImageUpload(dataUrl)
       }
       reader.readAsDataURL(file)
     }
   }
-
-  // 사용할 이미지 (연결된 이미지 우선, 없으면 업로드 이미지)
-  const sourceImage = connectedImage || uploadedImage
 
   /**
    * 투명 배경 처리 (차이 매트 방식)
@@ -368,11 +371,34 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
 
         {/* 이미지 입력 영역 */}
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: '#667eea', marginBottom: 4, fontWeight: 'bold' }}>
-            🖼️ 원본 이미지 {connectedImage ? '(노드 연결됨)' : '(연결 또는 업로드)'}
+          <div style={{ fontSize: 11, color: '#667eea', marginBottom: 4, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>🖼️ 원본 이미지 {connectedImage ? '(노드 연결)' : uploadedImage ? '(업로드)' : ''}</span>
+            {sourceImage && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // 업로드 이미지 삭제
+                  setUploadedImage(null)
+                  // 노드 연결도 끊기
+                  setEdges((eds) => eds.filter((edge) => !(edge.target === id && edge.targetHandle === 'image-in')))
+                  setConnectedImage(null)
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#888',
+                  cursor: 'pointer',
+                  fontSize: 10,
+                  padding: '2px 4px',
+                }}
+                title="이미지 삭제"
+              >
+                ✕
+              </button>
+            )}
           </div>
           <div
-            onClick={() => !connectedImage && fileInputRef.current?.click()}
+            onClick={() => fileInputRef.current?.click()}
             onDrop={handleDrop}
             onDragOver={(e) => {
               e.preventDefault()
@@ -388,7 +414,7 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
               borderRadius: 6,
               padding: 12,
               textAlign: 'center',
-              cursor: connectedImage ? 'default' : 'pointer',
+              cursor: 'pointer',
               background: sourceImage ? 'transparent' : '#2a2a3e',
               minHeight: 80,
               display: 'flex',
