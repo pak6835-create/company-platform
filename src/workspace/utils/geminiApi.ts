@@ -121,8 +121,9 @@ export async function editImage(
 ): Promise<{ base64: string; url: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
-  // 요청 parts 구성
+  // 요청 parts 구성 (공식 문서: 텍스트가 먼저, 그 다음 이미지들)
   const parts: any[] = [
+    { text: editPrompt },
     { inlineData: { mimeType, data: imageBase64 } },
   ]
 
@@ -130,9 +131,6 @@ export async function editImage(
   if (referenceBase64) {
     parts.push({ inlineData: { mimeType, data: referenceBase64 } })
   }
-
-  // 프롬프트 추가
-  parts.push({ text: editPrompt })
 
   // generationConfig 구성
   const generationConfig: any = {
