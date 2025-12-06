@@ -104,9 +104,29 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     reader.readAsDataURL(file)
   }
 
-  // 드래그 앤 드롭 처리
+  // 드래그 앤 드롭 처리 (파일 + 라이브러리 이미지)
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
+
+    // 라이브러리에서 드래그한 이미지 처리
+    const jsonData = e.dataTransfer.getData('application/json')
+    if (jsonData) {
+      try {
+        const parsed = JSON.parse(jsonData)
+        if (parsed.type === 'asset' && parsed.url) {
+          setUploadedImage(parsed.url)
+          setTransparentImage(null)
+          setStatusText('')
+          setProgress(0)
+          return
+        }
+      } catch (err) {
+        // JSON 파싱 실패 시 파일로 처리
+      }
+    }
+
+    // 파일 드래그앤드롭 처리
     const file = e.dataTransfer.files[0]
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader()
