@@ -109,8 +109,8 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     e.preventDefault()
     e.stopPropagation()
 
-    // 라이브러리에서 드래그한 이미지 처리
-    const jsonData = e.dataTransfer.getData('application/json')
+    // 라이브러리에서 드래그한 이미지 처리 (application/json 또는 text/plain)
+    const jsonData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain')
     if (jsonData) {
       try {
         const parsed = JSON.parse(jsonData)

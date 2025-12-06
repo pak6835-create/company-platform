@@ -343,8 +343,8 @@ function WorkspaceCanvas() {
         y: event.clientY - bounds.top,
       })
 
-      // 어셋 드래그앤드롭 처리
-      const assetData = event.dataTransfer.getData('application/json')
+      // 어셋 드래그앤드롭 처리 (application/json 또는 text/plain)
+      const assetData = event.dataTransfer.getData('application/json') || event.dataTransfer.getData('text/plain')
       if (assetData) {
         try {
           const parsed = JSON.parse(assetData)
@@ -969,12 +969,19 @@ function WorkspaceCanvas() {
                       title={`${asset.prompt}\n드래그하여 캔버스에 추가`}
                       draggable
                       onDragStart={(e) => {
-                        e.dataTransfer.setData('application/json', JSON.stringify({
+                        const data = JSON.stringify({
                           type: 'asset',
                           url: asset.url,
                           prompt: asset.prompt
-                        }))
-                        e.dataTransfer.effectAllowed = 'copy'
+                        })
+                        e.dataTransfer.setData('application/json', data)
+                        e.dataTransfer.setData('text/plain', data)
+                        e.dataTransfer.effectAllowed = 'copyMove'
+                        // 드래그 이미지 설정
+                        const img = e.currentTarget.querySelector('img')
+                        if (img) {
+                          e.dataTransfer.setDragImage(img, 50, 50)
+                        }
                       }}
                     >
                       <img src={asset.url} alt="asset" draggable={false} />
