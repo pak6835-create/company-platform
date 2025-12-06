@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" log --oneline -10)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" remote -v)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add index.html)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix script path for GitHub Pages deployment\n\nChange absolute path to relative path so Vite correctly resolves the base URL\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" checkout master)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" merge cranky-wright)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add -A)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix React Router basename for GitHub Pages\n\nAdd basename to BrowserRouter to handle /company-platform/ base URL\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\OneDrive\\바탕 화면\\company-platform\" merge cranky-wright)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\OneDrive\\바탕 화면\\company-platform\" push)",
+      "Bash(npm run build:*)",
+      "Bash(npx vite build:*)",
+      "Bash(npm install)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nRestructure workspace nodes for better UX\n\n- Fix API error: Direct Gemini API call instead of Netlify functions\n- Add scrollable content for all nodes\n- Split PromptBuilder into 3 separate nodes (Scene/Character/Props)\n- Merge 6 reference nodes into 1 with dropdown selector\n- Merge 5 post-process nodes into 1 with dropdown selector\n- Add CSS for scrollable containers and new node styles\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(mkdir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nRefactor workspace into modular architecture\n\n- Split 2000+ line Workspace.tsx into organized modules\n- Create src/workspace/ folder structure:\n  - types/: TypeScript interfaces and type definitions\n  - config/: Node configuration data (colors, titles, etc.)\n  - components/: Individual node components (11 files)\n  - hooks/: useWorkspace hook for state management\n  - utils/: Storage utilities for localStorage\n- Reduce main Workspace.tsx from ~2000 to ~600 lines\n- Enable independent file modifications without breaking others\n- Improve code maintainability and testability\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)",
+      "Bash(git commit:*)",
+      "Bash(git merge:*)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix white screen by adding null safety checks\n\n- Add fallback defaults for PROMPT_NODE_DATA, PROMPT_COLORS, PROMPT_TITLES\n- Add fallback defaults for REFERENCE_NODE_CONFIG and config.options\n- Add fallback defaults for POSTPROCESS_NODE_CONFIG and config.options\n- Prevents crashes when node configs are undefined\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" add CLAUDE.md)",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nUpdate CLAUDE.md with current project structure\n\n- Add developer info and communication style\n- Update project structure to reflect workspace module\n- Document all node types and their features\n- Add coding rules and troubleshooting guide\n- Update progress checklist\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nAdd 404.html for GitHub Pages SPA routing\n\n- Add Vite plugin to copy index.html to 404.html after build\n- Fixes 404 error when accessing routes directly on GitHub Pages\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix node connection crash in AIGeneratorNode\n\n- Add null safety checks for edges and nodes from useStore\n- Use useMemo for safe connection calculation\n- Check if edges/nodes are arrays before filtering\n- Prevents white screen when connecting prompt nodes to AI generator\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nFix image paths and add hero text animations\n\nImage path fixes:\n- Use BASE_URL for GitHub Pages compatibility\n- Fix hero background, partner logos, portfolio images\n- Fix logo path in SiteContext\n\nText motion animations:\n- Add AnimatedText component with per-character reveal\n- Add FadeUpText component with fade-in effect\n- Add hero title animation with 3D rotation\n- Add button hover ripple effect\n- Include responsive styles for animations\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" commit -m \"$(cat <<''EOF''\nAdd Nanobanana 3 Pro model for AI image generation\n\n- Add gemini-3-pro-image-preview (나노바나나 3 Pro)\n- Fix model IDs to correct format:\n  - gemini-2.0-flash-preview-image-generation (나노바나나 2)\n  - gemini-2.5-flash-preview-image-generation (나노바나나 2.5)\n  - gemini-3-pro-image-preview (나노바나나 3 Pro)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\qkrrl\\.claude-worktrees\\company-platform\\cranky-wright\" push origin cranky-wright)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
