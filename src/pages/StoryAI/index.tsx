@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSharedLibrary } from '../../context/SharedLibraryContext'
 import SettingTab from './SettingTab'
@@ -38,6 +38,8 @@ export interface Character {
   age: string
   goal: string
   secret: string
+  appearance?: string
+  backstory?: string
   personality: {
     introvert_extrovert: number
     emotional_rational: number
@@ -106,12 +108,30 @@ const createInitialProject = (): StoryProject => ({
   updatedAt: Date.now(),
 })
 
+// API 키 로컬스토리지 키
+const API_KEY_STORAGE = 'gemini_api_key'
+
 export default function StoryAI() {
   const navigate = useNavigate()
   const { assets } = useSharedLibrary()
   const [activeTab, setActiveTab] = useState<TabType>('setting')
   const [project, setProject] = useState<StoryProject>(createInitialProject())
   const [showLibrary, setShowLibrary] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+
+  // API 키 로드
+  useEffect(() => {
+    const savedKey = localStorage.getItem(API_KEY_STORAGE)
+    if (savedKey) setApiKey(savedKey)
+  }, [])
+
+  // API 키 저장
+  const handleApiKeyChange = (key: string) => {
+    setApiKey(key)
+    if (key) {
+      localStorage.setItem(API_KEY_STORAGE, key)
+    }
+  }
 
   // 탭 정보
   const tabs: { id: TabType; label: string; icon: string }[] = [
@@ -128,6 +148,14 @@ export default function StoryAI() {
       ...updates,
       updatedAt: Date.now(),
     }))
+  }
+
+  // 다음 탭으로 이동
+  const goToNextTab = () => {
+    const currentIndex = tabs.findIndex((t) => t.id === activeTab)
+    if (currentIndex < tabs.length - 1) {
+      setActiveTab(tabs[currentIndex + 1].id)
+    }
   }
 
   return (
@@ -161,12 +189,13 @@ export default function StoryAI() {
 
       {/* 탭 네비게이션 */}
       <nav className="story-tabs">
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <button
             key={tab.id}
             className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
+            <span className="tab-number">{index + 1}</span>
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>
           </button>
@@ -176,16 +205,32 @@ export default function StoryAI() {
       {/* 메인 컨텐츠 */}
       <main className="story-content">
         {activeTab === 'setting' && (
-          <SettingTab project={project} updateProject={updateProject} />
+          <SettingTab
+            project={project}
+            updateProject={updateProject}
+            apiKey={apiKey}
+            setApiKey={handleApiKeyChange}
+            onNext={goToNextTab}
+          />
         )}
         {activeTab === 'character' && (
-          <CharacterTab project={project} updateProject={updateProject} />
+          <CharacterTab
+            project={project}
+            updateProject={updateProject}
+            apiKey={apiKey}
+            onNext={goToNextTab}
+          />
         )}
         {activeTab === 'simulation' && (
-          <SimulationTab project={project} updateProject={updateProject} />
+          <SimulationTab
+            project={project}
+            updateProject={updateProject}
+            apiKey={apiKey}
+            onNext={goToNextTab}
+          />
         )}
         {activeTab === 'result' && (
-          <ResultTab project={project} />
+          <ResultTab project={project} updateProject={updateProject} apiKey={apiKey} />
         )}
       </main>
 

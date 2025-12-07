@@ -4,6 +4,8 @@ import type { StoryProject, Character } from './index'
 interface Props {
   project: StoryProject
   updateProject: (updates: Partial<StoryProject>) => void
+  apiKey: string
+  onNext: () => void
 }
 
 // 역할 옵션
@@ -17,6 +19,8 @@ const createDefaultCharacter = (): Character => ({
   age: '',
   goal: '',
   secret: '',
+  appearance: '',
+  backstory: '',
   personality: {
     introvert_extrovert: 50,
     emotional_rational: 50,
@@ -62,12 +66,143 @@ const HABIT_OPTIONS = [
 
 type EditTab = 'basic' | 'personality' | 'speech' | 'relationship'
 
-export default function CharacterTab({ project, updateProject }: Props) {
+export default function CharacterTab({ project, updateProject, apiKey, onNext }: Props) {
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null)
   const [editTab, setEditTab] = useState<EditTab>('basic')
   const [newExample, setNewExample] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [charCount, setCharCount] = useState(3)
 
   const selectedChar = project.characters.find((c) => c.id === selectedCharId)
+
+  // AI 캐릭터 자동생성
+  const generateCharacters = async () => {
+    if (!apiKey) {
+      alert('설정 탭에서 Gemini API 키를 먼저 입력해주세요.')
+      return
+    }
+    if (!project.worldSetting) {
+      alert('먼저 설정 탭에서 세계관을 생성해주세요.')
+      return
+    }
+
+    setIsGenerating(true)
+
+    const prompt = `
+당신은 웹툰/웹소설 캐릭터 전문가입니다.
+다음 세계관에 맞는 캐릭터 ${charCount}명을 만들어주세요.
+
+[세계관]
+${project.worldSetting.description}
+규칙: ${project.worldSetting.rules.join(', ')}
+시대: ${project.worldSetting.timeline}
+
+[플롯]
+1막: ${project.plot?.act1 || ''}
+2막: ${project.plot?.act2 || ''}
+3막: ${project.plot?.act3 || ''}
+
+[요구사항]
+- 주인공 1명, 조력자 1명, 악역 1명 포함 (${charCount}명 중에서)
+- 각 캐릭터는 서로 다른 성격과 말투를 가짐
+- 캐릭터 간의 관계도 설정
+
+다음 형식의 JSON으로만 응답해주세요:
+{
+  "characters": [
+    {
+      "name": "캐릭터 이름",
+      "role": "역할 (주인공/조력자/악역/서브주인공/멘토/라이벌)",
+      "age": "나이",
+      "goal": "목표",
+      "secret": "비밀",
+      "appearance": "외모 묘사 (1-2문장)",
+      "backstory": "배경 이야기 (2-3문장)",
+      "personality": {
+        "introvert_extrovert": 0-100,
+        "emotional_rational": 0-100,
+        "timid_bold": 0-100,
+        "selfish_altruistic": 0-100,
+        "serious_humorous": 0-100
+      },
+      "speechStyle": {
+        "formal_casual": 0-100,
+        "quiet_talkative": 0-100,
+        "habits": ["습관1", "습관2"],
+        "examples": ["예시 대사1", "예시 대사2"]
+      }
+    }
+  ]
+}
+`
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.9,
+              maxOutputTokens: 4096,
+            },
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error.message || 'API 오류')
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+      if (text) {
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed.characters && Array.isArray(parsed.characters)) {
+            const newCharacters: Character[] = parsed.characters.map((c: Partial<Character>, index: number) => ({
+              id: `char-${Date.now()}-${index}`,
+              name: c.name || '이름 없음',
+              role: c.role || '주인공',
+              age: c.age || '',
+              goal: c.goal || '',
+              secret: c.secret || '',
+              appearance: c.appearance || '',
+              backstory: c.backstory || '',
+              personality: c.personality || {
+                introvert_extrovert: 50,
+                emotional_rational: 50,
+                timid_bold: 50,
+                selfish_altruistic: 50,
+                serious_humorous: 50,
+              },
+              speechStyle: c.speechStyle || {
+                formal_casual: 50,
+                quiet_talkative: 50,
+                habits: [],
+                examples: [],
+              },
+              relationships: {},
+            }))
+            updateProject({ characters: [...project.characters, ...newCharacters] })
+            if (newCharacters.length > 0) {
+              setSelectedCharId(newCharacters[0].id)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('캐릭터 생성 실패:', error)
+      alert(`캐릭터 생성 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`)
+    } finally {
+      setIsGenerating(false)
+    }
+  }
 
   // 캐릭터 추가
   const addCharacter = () => {
@@ -135,14 +270,52 @@ export default function CharacterTab({ project, updateProject }: Props) {
     )
   }
 
+  const canProceed = project.characters.length >= 2
+
   return (
     <div className="character-tab">
+      {/* AI 캐릭터 생성 섹션 */}
+      <div className="section ai-generate-section">
+        <div className="section-header">
+          <span className="icon">🤖</span>
+          <h2>AI 캐릭터 자동 생성</h2>
+        </div>
+        <p className="section-desc">
+          세계관에 맞는 캐릭터를 AI가 자동으로 생성합니다.
+        </p>
+        <div className="generate-controls">
+          <div className="char-count-control">
+            <label>생성할 캐릭터 수:</label>
+            <select
+              value={charCount}
+              onChange={(e) => setCharCount(Number(e.target.value))}
+              className="form-select small"
+            >
+              <option value={2}>2명</option>
+              <option value={3}>3명</option>
+              <option value={4}>4명</option>
+              <option value={5}>5명</option>
+            </select>
+          </div>
+          <button
+            className="btn-primary"
+            onClick={generateCharacters}
+            disabled={isGenerating || !project.worldSetting}
+          >
+            {isGenerating ? '⏳ 생성 중...' : '🎭 캐릭터 자동 생성'}
+          </button>
+        </div>
+        {!project.worldSetting && (
+          <p className="warning-text">⚠️ 먼저 설정 탭에서 세계관을 생성해주세요.</p>
+        )}
+      </div>
+
       <div className="character-layout">
         {/* 캐릭터 목록 */}
         <div className="character-list-section">
           <div className="section-header">
             <span className="icon">👥</span>
-            <h2>캐릭터 목록</h2>
+            <h2>캐릭터 목록 ({project.characters.length})</h2>
           </div>
           <div className="character-list">
             {project.characters.map((char) => (
@@ -171,7 +344,7 @@ export default function CharacterTab({ project, updateProject }: Props) {
             ))}
             <button className="add-character-btn" onClick={addCharacter}>
               <span>+</span>
-              <span>캐릭터 추가</span>
+              <span>수동으로 추가</span>
             </button>
           </div>
         </div>
@@ -244,6 +417,30 @@ export default function CharacterTab({ project, updateProject }: Props) {
                       updateCharacter(selectedChar.id, { age: e.target.value })
                     }
                     placeholder="예: 25세, 32→22세 (회귀)"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>외모</label>
+                  <textarea
+                    className="form-textarea"
+                    value={selectedChar.appearance || ''}
+                    onChange={(e) =>
+                      updateCharacter(selectedChar.id, { appearance: e.target.value })
+                    }
+                    placeholder="캐릭터의 외모를 묘사해주세요"
+                    rows={2}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>배경 이야기</label>
+                  <textarea
+                    className="form-textarea"
+                    value={selectedChar.backstory || ''}
+                    onChange={(e) =>
+                      updateCharacter(selectedChar.id, { backstory: e.target.value })
+                    }
+                    placeholder="캐릭터의 과거와 배경을 적어주세요"
+                    rows={3}
                   />
                 </div>
                 <div className="form-group">
@@ -377,7 +574,7 @@ export default function CharacterTab({ project, updateProject }: Props) {
             {editTab === 'relationship' && (
               <div className="edit-content">
                 <p className="tab-description">
-                  다른 캐릭터와의 관계를 설정하세요. (준비 중)
+                  다른 캐릭터와의 관계를 설정하세요.
                 </p>
                 {project.characters
                   .filter((c) => c.id !== selectedChar.id)
@@ -387,7 +584,19 @@ export default function CharacterTab({ project, updateProject }: Props) {
                         <div className="char-avatar small">{other.name.charAt(0)}</div>
                         <span>{other.name}</span>
                       </div>
-                      <select className="form-select small">
+                      <select
+                        className="form-select small"
+                        value={selectedChar.relationships[other.id]?.type || ''}
+                        onChange={(e) => {
+                          const newRel = { ...selectedChar.relationships }
+                          if (e.target.value) {
+                            newRel[other.id] = { type: e.target.value, level: 50 }
+                          } else {
+                            delete newRel[other.id]
+                          }
+                          updateCharacter(selectedChar.id, { relationships: newRel })
+                        }}
+                      >
                         <option value="">관계 선택...</option>
                         <option value="친구">친구</option>
                         <option value="적">적</option>
@@ -395,6 +604,7 @@ export default function CharacterTab({ project, updateProject }: Props) {
                         <option value="가족">가족</option>
                         <option value="라이벌">라이벌</option>
                         <option value="스승">스승</option>
+                        <option value="동료">동료</option>
                       </select>
                     </div>
                   ))}
@@ -408,21 +618,65 @@ export default function CharacterTab({ project, updateProject }: Props) {
           </div>
         ) : (
           <div className="no-selection">
-            <p>왼쪽에서 캐릭터를 선택하거나 새로 추가하세요.</p>
+            <p>왼쪽에서 캐릭터를 선택하거나 AI로 자동 생성하세요.</p>
           </div>
         )}
       </div>
+
+      {/* 다음 단계 버튼 */}
+      {canProceed && (
+        <div className="next-step">
+          <button className="btn-primary" onClick={onNext}>
+            다음 단계: 시뮬레이션 →
+          </button>
+        </div>
+      )}
 
       <style>{`
         .character-tab {
           height: 100%;
         }
 
+        .ai-generate-section {
+          max-width: 100%;
+          margin-bottom: 24px;
+        }
+
+        .section-desc {
+          font-size: 14px;
+          color: #94a3b8;
+          margin: 0 0 16px 0;
+        }
+
+        .generate-controls {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .char-count-control {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #94a3b8;
+          font-size: 14px;
+        }
+
+        .char-count-control .form-select {
+          width: auto;
+        }
+
+        .warning-text {
+          color: #f59e0b;
+          font-size: 13px;
+          margin-top: 12px;
+        }
+
         .character-layout {
           display: grid;
           grid-template-columns: 280px 1fr;
           gap: 24px;
-          height: calc(100vh - 200px);
+          height: calc(100vh - 360px);
         }
 
         .character-list-section,
@@ -577,6 +831,23 @@ export default function CharacterTab({ project, updateProject }: Props) {
           gap: 16px;
         }
 
+        .form-textarea {
+          width: 100%;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: #fff;
+          padding: 10px 14px;
+          border-radius: 8px;
+          font-size: 14px;
+          resize: vertical;
+          min-height: 60px;
+        }
+
+        .form-textarea:focus {
+          outline: none;
+          border-color: #7c3aed;
+        }
+
         .slider-group {
           margin-bottom: 20px;
         }
@@ -718,6 +989,16 @@ export default function CharacterTab({ project, updateProject }: Props) {
           font-size: 13px;
           text-align: center;
           padding: 20px;
+        }
+
+        .next-step {
+          margin-top: 24px;
+          text-align: center;
+        }
+
+        .next-step .btn-primary {
+          padding: 16px 32px;
+          font-size: 16px;
         }
 
         @media (max-width: 768px) {

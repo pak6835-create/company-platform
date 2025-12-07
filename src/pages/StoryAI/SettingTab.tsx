@@ -4,6 +4,9 @@ import type { StoryProject } from './index'
 interface Props {
   project: StoryProject
   updateProject: (updates: Partial<StoryProject>) => void
+  apiKey: string
+  setApiKey: (key: string) => void
+  onNext: () => void
 }
 
 // 장르 옵션
@@ -44,10 +47,9 @@ const KEYWORD_SUGGESTIONS: { [genre: string]: string[] } = {
   slice_of_life: ['일상', '힐링', '성장', '우정', '취미', '직장'],
 }
 
-export default function SettingTab({ project, updateProject }: Props) {
+export default function SettingTab({ project, updateProject, apiKey, setApiKey, onNext }: Props) {
   const [newKeyword, setNewKeyword] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [apiKey, setApiKey] = useState('')
 
   // 키워드 추가
   const addKeyword = (keyword: string) => {
@@ -75,15 +77,18 @@ export default function SettingTab({ project, updateProject }: Props) {
 
     setIsGenerating(true)
 
+    const genreLabel = GENRES.find((g) => g.value === project.genre)?.label || project.genre
+    const moodLabel = MOODS.find((m) => m.value === project.mood)?.label || project.mood || '자유'
+
     const prompt = `
 당신은 웹툰/웹소설 세계관 전문가입니다.
 다음 설정으로 웹툰 세계관과 플롯을 만들어주세요.
 
-장르: ${GENRES.find((g) => g.value === project.genre)?.label || project.genre}
+장르: ${genreLabel}
 키워드: ${project.keywords.join(', ') || '없음'}
-분위기: ${MOODS.find((m) => m.value === project.mood)?.label || project.mood || '자유'}
+분위기: ${moodLabel}
 
-다음 형식으로 응답해주세요 (JSON):
+다음 형식의 JSON으로만 응답해주세요 (다른 텍스트 없이):
 {
   "worldSetting": {
     "description": "세계관 설명 (200자 내외)",
@@ -91,9 +96,9 @@ export default function SettingTab({ project, updateProject }: Props) {
     "timeline": "시대 배경"
   },
   "plot": {
-    "act1": "1막 요약 (도입부)",
-    "act2": "2막 요약 (전개부)",
-    "act3": "3막 요약 (결말부)"
+    "act1": "1막 요약 (도입부, 1-30화)",
+    "act2": "2막 요약 (전개부, 31-70화)",
+    "act3": "3막 요약 (결말부, 71-100화)"
   }
 }
 `
@@ -115,6 +120,11 @@ export default function SettingTab({ project, updateProject }: Props) {
       )
 
       const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error.message || 'API 오류')
+      }
+
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text
 
       if (text) {
@@ -130,13 +140,14 @@ export default function SettingTab({ project, updateProject }: Props) {
       }
     } catch (error) {
       console.error('설정 생성 실패:', error)
-      alert('설정 생성에 실패했습니다. API 키를 확인해주세요.')
+      alert(`설정 생성 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`)
     } finally {
       setIsGenerating(false)
     }
   }
 
   const suggestions = KEYWORD_SUGGESTIONS[project.genre] || []
+  const canProceed = project.worldSetting && project.plot
 
   return (
     <div className="setting-tab">
@@ -144,10 +155,10 @@ export default function SettingTab({ project, updateProject }: Props) {
       <div className="section">
         <div className="section-header">
           <span className="icon">🔑</span>
-          <h2>API 설정</h2>
+          <h2>Gemini API 설정</h2>
         </div>
         <div className="form-group">
-          <label>Gemini API 키</label>
+          <label>API 키 (모든 기능에서 공유됨)</label>
           <input
             type="password"
             className="form-input"
@@ -159,7 +170,7 @@ export default function SettingTab({ project, updateProject }: Props) {
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">
               Google AI Studio
             </a>
-            에서 API 키를 발급받을 수 있습니다.
+            에서 API 키를 발급받을 수 있습니다. 한번 입력하면 저장됩니다.
           </p>
         </div>
       </div>
@@ -174,7 +185,7 @@ export default function SettingTab({ project, updateProject }: Props) {
         <div className="setting-grid">
           {/* 장르 선택 */}
           <div className="form-group">
-            <label>장르</label>
+            <label>장르 *</label>
             <select
               className="form-select"
               value={project.genre}
@@ -264,7 +275,7 @@ export default function SettingTab({ project, updateProject }: Props) {
           onClick={generateSetting}
           disabled={isGenerating || !apiKey || !project.genre}
         >
-          {isGenerating ? '⏳ 생성 중...' : '🚀 설정 생성'}
+          {isGenerating ? '⏳ 생성 중...' : '🚀 세계관 & 플롯 생성'}
         </button>
       </div>
 
@@ -322,6 +333,15 @@ export default function SettingTab({ project, updateProject }: Props) {
               <p>{project.plot.act3}</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 다음 단계 버튼 */}
+      {canProceed && (
+        <div className="next-step">
+          <button className="btn-primary" onClick={onNext}>
+            다음 단계: 캐릭터 생성 →
+          </button>
         </div>
       )}
 
@@ -488,6 +508,16 @@ export default function SettingTab({ project, updateProject }: Props) {
           color: #64748b;
           font-size: 20px;
           padding-top: 32px;
+        }
+
+        .next-step {
+          margin-top: 24px;
+          text-align: center;
+        }
+
+        .next-step .btn-primary {
+          padding: 16px 32px;
+          font-size: 16px;
         }
 
         @media (max-width: 640px) {

@@ -1,19 +1,187 @@
 import { useState } from 'react'
-import type { StoryProject } from './index'
+import type { StoryProject, Episode } from './index'
 
 interface Props {
   project: StoryProject
+  updateProject: (updates: Partial<StoryProject>) => void
+  apiKey: string
 }
 
 type ViewTab = 'summary' | 'dialogue' | 'storyboard'
 
-export default function ResultTab({ project }: Props) {
+export default function ResultTab({ project, updateProject, apiKey }: Props) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(
     project.episodes[0]?.id || null
   )
   const [viewTab, setViewTab] = useState<ViewTab>('summary')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationType, setGenerationType] = useState<'summary' | 'storyboard' | null>(null)
 
   const selectedEpisode = project.episodes.find((e) => e.id === selectedEpisodeId)
+
+  // 에피소드 결과 업데이트
+  const updateEpisodeResult = (episodeId: string, result: Partial<Episode['result']>) => {
+    const updatedEpisodes = project.episodes.map((ep) => {
+      if (ep.id === episodeId) {
+        return {
+          ...ep,
+          result: {
+            summary: ep.result?.summary || '',
+            dialogue: ep.result?.dialogue || [],
+            storyboard: ep.result?.storyboard || [],
+            ...result,
+          },
+        }
+      }
+      return ep
+    })
+    updateProject({ episodes: updatedEpisodes })
+  }
+
+  // AI 요약 생성
+  const generateSummary = async () => {
+    if (!apiKey || !selectedEpisode?.simulation?.turns) return
+
+    setIsGenerating(true)
+    setGenerationType('summary')
+
+    const turns = selectedEpisode.simulation.turns
+    const dialogueText = turns
+      .map((t) => `${t.characterName}: "${t.dialogue}" ${t.action ? `(${t.action})` : ''}`)
+      .join('\n')
+
+    const prompt = `
+당신은 웹툰/웹소설 요약 전문가입니다.
+다음 캐릭터 대화를 바탕으로 에피소드 요약을 작성해주세요.
+
+[세계관]
+${project.worldSetting?.description || '정보 없음'}
+
+[등장인물]
+${project.characters.map((c) => `- ${c.name} (${c.role})`).join('\n')}
+
+[대화 내용]
+${dialogueText}
+
+다음 형식의 JSON으로만 응답해주세요:
+{
+  "summary": "에피소드 요약 (200-300자, 감정과 분위기를 담아서)"
+}
+`
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+          }),
+        }
+      )
+
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+      if (text) {
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          updateEpisodeResult(selectedEpisode.id, { summary: parsed.summary })
+        }
+      }
+    } catch (error) {
+      console.error('요약 생성 실패:', error)
+      alert('요약 생성에 실패했습니다.')
+    } finally {
+      setIsGenerating(false)
+      setGenerationType(null)
+    }
+  }
+
+  // AI 콘티 생성
+  const generateStoryboard = async () => {
+    if (!apiKey || !selectedEpisode?.simulation?.turns) return
+
+    setIsGenerating(true)
+    setGenerationType('storyboard')
+
+    const turns = selectedEpisode.simulation.turns
+    const dialogueText = turns
+      .map((t) => `${t.characterName}: "${t.dialogue}" ${t.action ? `(${t.action})` : ''} [감정: ${t.emotion}]`)
+      .join('\n')
+
+    const prompt = `
+당신은 웹툰 콘티 전문가입니다.
+다음 대화와 액션을 바탕으로 웹툰 콘티를 제안해주세요.
+
+[장르]
+${project.genre}
+
+[분위기]
+${project.mood || '자유'}
+
+[등장인물]
+${project.characters.map((c) => `- ${c.name}: ${c.appearance || '외모 미정'}`).join('\n')}
+
+[씬 정보]
+${selectedEpisode.scenes?.map((s) => `- 장소: ${s.location}, 시간: ${s.time}`).join('\n') || '정보 없음'}
+
+[대화/액션]
+${dialogueText}
+
+웹툰 형식에 맞게 8-12개의 컷(씬)으로 나눠주세요.
+각 컷에는 샷 타입(와이드, 미디엄, 클로즈업 등)과 간단한 연출 설명을 포함해주세요.
+
+다음 형식의 JSON으로만 응답해주세요:
+{
+  "storyboard": [
+    "컷1: (와이드샷) 배경 전경, OO가 등장하는 장면",
+    "컷2: (미디엄샷) OO의 표정과 대사",
+    ...
+  ]
+}
+`
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.8, maxOutputTokens: 2048 },
+          }),
+        }
+      )
+
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+      if (text) {
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          updateEpisodeResult(selectedEpisode.id, { storyboard: parsed.storyboard })
+        }
+      }
+    } catch (error) {
+      console.error('콘티 생성 실패:', error)
+      alert('콘티 생성에 실패했습니다.')
+    } finally {
+      setIsGenerating(false)
+      setGenerationType(null)
+    }
+  }
+
+  // 전체 생성 (요약 + 콘티)
+  const generateAll = async () => {
+    await generateSummary()
+    await generateStoryboard()
+  }
 
   // 내보내기 (텍스트)
   const exportAsText = () => {
@@ -102,10 +270,31 @@ export default function ResultTab({ project }: Props) {
                   {selectedEpisode.result?.summary ? (
                     <div className="summary-content">
                       <p>{selectedEpisode.result.summary}</p>
+                      <button
+                        className="btn-secondary regenerate-btn"
+                        onClick={generateSummary}
+                        disabled={isGenerating}
+                      >
+                        🔄 다시 생성
+                      </button>
                     </div>
                   ) : (
                     <div className="empty-content">
-                      <p>시뮬레이션을 완료하면 AI가 자동으로 요약을 생성합니다.</p>
+                      <p>시뮬레이션 결과를 바탕으로 AI가 요약을 생성합니다.</p>
+                      {selectedEpisode.simulation?.turns &&
+                      selectedEpisode.simulation.turns.length > 0 ? (
+                        <button
+                          className="btn-primary"
+                          onClick={generateSummary}
+                          disabled={isGenerating || !apiKey}
+                        >
+                          {isGenerating && generationType === 'summary'
+                            ? '⏳ 요약 생성 중...'
+                            : '🚀 AI 요약 생성'}
+                        </button>
+                      ) : (
+                        <p className="hint">먼저 시뮬레이션을 완료해주세요.</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -140,31 +329,54 @@ export default function ResultTab({ project }: Props) {
                 <div className="view-content">
                   {selectedEpisode.result?.storyboard &&
                   selectedEpisode.result.storyboard.length > 0 ? (
-                    <div className="storyboard-list">
-                      {selectedEpisode.result.storyboard.map((scene, i) => (
-                        <div key={i} className="storyboard-item">
-                          <div className="scene-number">씬 {i + 1}</div>
-                          <div className="scene-desc">{scene}</div>
-                        </div>
-                      ))}
+                    <div className="storyboard-section">
+                      <div className="storyboard-list">
+                        {selectedEpisode.result.storyboard.map((scene, i) => (
+                          <div key={i} className="storyboard-item">
+                            <div className="scene-number">씬 {i + 1}</div>
+                            <div className="scene-desc">{scene}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        className="btn-secondary regenerate-btn"
+                        onClick={generateStoryboard}
+                        disabled={isGenerating}
+                      >
+                        🔄 다시 생성
+                      </button>
                     </div>
                   ) : (
                     <div className="empty-content">
-                      <p>시뮬레이션을 완료하면 AI가 콘티 제안을 생성합니다.</p>
+                      <p>시뮬레이션 결과를 바탕으로 AI가 콘티를 제안합니다.</p>
+                      {selectedEpisode.simulation?.turns &&
+                      selectedEpisode.simulation.turns.length > 0 ? (
+                        <button
+                          className="btn-primary"
+                          onClick={generateStoryboard}
+                          disabled={isGenerating || !apiKey}
+                        >
+                          {isGenerating && generationType === 'storyboard'
+                            ? '⏳ 콘티 생성 중...'
+                            : '🚀 AI 콘티 생성'}
+                        </button>
+                      ) : (
+                        <p className="hint">먼저 시뮬레이션을 완료해주세요.</p>
+                      )}
                       <div className="storyboard-preview">
                         <h4>콘티 예시</h4>
                         <div className="preview-list">
                           <div className="preview-item">
-                            <span className="preview-num">씬1</span>
-                            <span>배경 전경 (와이드샷)</span>
+                            <span className="preview-num">컷1</span>
+                            <span>(와이드샷) 배경 전경</span>
                           </div>
                           <div className="preview-item">
-                            <span className="preview-num">씬2</span>
-                            <span>주인공 뒷모습 (미디엄샷)</span>
+                            <span className="preview-num">컷2</span>
+                            <span>(미디엄샷) 주인공 등장</span>
                           </div>
                           <div className="preview-item">
-                            <span className="preview-num">씬3</span>
-                            <span>주인공 눈 클로즈업</span>
+                            <span className="preview-num">컷3</span>
+                            <span>(클로즈업) 표정 연출</span>
                           </div>
                         </div>
                       </div>
@@ -175,11 +387,18 @@ export default function ResultTab({ project }: Props) {
 
               {/* 액션 버튼 */}
               <div className="action-buttons">
+                {selectedEpisode.simulation?.turns &&
+                selectedEpisode.simulation.turns.length > 0 && (
+                  <button
+                    className="btn-primary"
+                    onClick={generateAll}
+                    disabled={isGenerating || !apiKey}
+                  >
+                    {isGenerating ? '⏳ 생성 중...' : '🚀 요약 + 콘티 전체 생성'}
+                  </button>
+                )}
                 <button className="btn-secondary" onClick={exportAsText}>
                   📥 텍스트로 내보내기
-                </button>
-                <button className="btn-secondary">
-                  🔄 다시 시뮬레이션
                 </button>
               </div>
             </div>
@@ -327,6 +546,28 @@ export default function ResultTab({ project }: Props) {
           font-size: 15px;
           color: #cbd5e1;
           line-height: 1.8;
+        }
+
+        .summary-content {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .regenerate-btn {
+          align-self: flex-start;
+        }
+
+        .storyboard-section {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .hint {
+          font-size: 13px;
+          color: #64748b;
+          font-style: italic;
         }
 
         .dialogue-list {

@@ -1,15 +1,18 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { StoryProject, Episode, Scene, SimulationTurn } from './index'
 
 interface Props {
   project: StoryProject
   updateProject: (updates: Partial<StoryProject>) => void
+  apiKey: string
+  onNext: () => void
 }
 
-export default function SimulationTab({ project, updateProject }: Props) {
+export default function SimulationTab({ project, updateProject, apiKey, onNext }: Props) {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [isSimulating, setIsSimulating] = useState(false)
-  const [apiKey, setApiKey] = useState('')
+  const [currentTurn, setCurrentTurn] = useState(0)
+  const stopRef = useRef(false)
 
   // 씬 설정 상태
   const [sceneSetup, setSceneSetup] = useState<Partial<Scene>>({
@@ -20,7 +23,7 @@ export default function SimulationTab({ project, updateProject }: Props) {
     events: [],
     endCondition: '',
   })
-  const [maxTurns, setMaxTurns] = useState(20)
+  const [maxTurns, setMaxTurns] = useState(10)
 
   // 시뮬레이션 결과
   const [simulationTurns, setSimulationTurns] = useState<SimulationTurn[]>([])
@@ -71,41 +74,167 @@ export default function SimulationTab({ project, updateProject }: Props) {
     }
   }
 
-  // 시뮬레이션 시작 (실제 API 연동은 나중에)
+  // 캐릭터 시스템 프롬프트 생성
+  const buildCharacterPrompt = (charId: string) => {
+    const char = project.characters.find((c) => c.id === charId)
+    if (!char) return ''
+
+    const personalityDesc = []
+    if (char.personality.introvert_extrovert < 40) personalityDesc.push('내향적')
+    else if (char.personality.introvert_extrovert > 60) personalityDesc.push('외향적')
+    if (char.personality.emotional_rational < 40) personalityDesc.push('감정적')
+    else if (char.personality.emotional_rational > 60) personalityDesc.push('이성적')
+    if (char.personality.timid_bold > 60) personalityDesc.push('대담함')
+    if (char.personality.serious_humorous > 60) personalityDesc.push('유머러스')
+
+    const speechDesc = []
+    if (char.speechStyle.formal_casual < 40) speechDesc.push('존댓말 사용')
+    else if (char.speechStyle.formal_casual > 60) speechDesc.push('반말 사용')
+    if (char.speechStyle.quiet_talkative < 40) speechDesc.push('말이 적음')
+    else if (char.speechStyle.quiet_talkative > 60) speechDesc.push('말이 많음')
+
+    return `
+캐릭터: ${char.name} (${char.role})
+나이: ${char.age}
+목표: ${char.goal}
+비밀: ${char.secret}
+성격: ${personalityDesc.join(', ') || '보통'}
+말투: ${speechDesc.join(', ') || '보통'}, ${char.speechStyle.habits.join(', ') || '특별한 습관 없음'}
+예시 대사: ${char.speechStyle.examples.join(' / ') || '없음'}
+`
+  }
+
+  // 시뮬레이션 시작
   const startSimulation = async () => {
     if (!apiKey) {
-      alert('Claude API 키를 입력해주세요.')
+      alert('설정 탭에서 Gemini API 키를 먼저 입력해주세요.')
       return
     }
-    if ((sceneSetup.participants?.length || 0) < 1) {
-      alert('참여 캐릭터를 1명 이상 선택해주세요.')
+    if ((sceneSetup.participants?.length || 0) < 2) {
+      alert('참여 캐릭터를 2명 이상 선택해주세요.')
       return
     }
 
     setIsSimulating(true)
     setSimulationTurns([])
+    setCurrentTurn(0)
+    stopRef.current = false
 
-    // 데모용 시뮬레이션 (실제로는 Claude API 호출)
     const participants = sceneSetup.participants || []
-    const demoTurns: SimulationTurn[] = []
+    const turns: SimulationTurn[] = []
+    let conversationHistory = ''
 
-    for (let i = 0; i < Math.min(5, maxTurns); i++) {
-      await new Promise((r) => setTimeout(r, 1000))
+    // 씬 컨텍스트
+    const sceneContext = `
+[세계관]
+${project.worldSetting?.description || ''}
 
-      const charId = participants[i % participants.length]
+[현재 씬]
+장소: ${sceneSetup.location || '어딘가'}
+시간: ${sceneSetup.time || '낮'}
+상황: ${sceneSetup.situation || '일상적인 상황'}
+예정된 이벤트: ${sceneSetup.events?.join(', ') || '없음'}
+
+[참여 캐릭터]
+${participants.map((pid) => buildCharacterPrompt(pid)).join('\n')}
+`
+
+    for (let i = 0; i < maxTurns; i++) {
+      if (stopRef.current) break
+
+      const charIndex = i % participants.length
+      const charId = participants[charIndex]
       const char = project.characters.find((c) => c.id === charId)
 
-      if (char) {
-        const turn: SimulationTurn = {
-          characterId: charId,
-          characterName: char.name,
-          dialogue: `[${char.name}의 대화 ${i + 1}] - Claude API 연동 시 실제 대화가 생성됩니다.`,
-          action: '(대기 중)',
-          emotion: '중립',
+      if (!char) continue
+
+      setCurrentTurn(i + 1)
+
+      const prompt = `
+${sceneContext}
+
+[이전 대화]
+${conversationHistory || '(아직 대화 없음 - 첫 대화를 시작하세요)'}
+
+[지시사항]
+당신은 "${char.name}" 캐릭터입니다.
+위 캐릭터 설정에 맞게 다음 대화를 해주세요.
+반드시 캐릭터의 성격과 말투를 유지하세요.
+
+다음 형식의 JSON으로만 응답하세요:
+{
+  "dialogue": "캐릭터의 대사",
+  "action": "캐릭터의 행동 묘사 (괄호 없이)",
+  "emotion": "현재 감정 (한 단어)"
+}
+`
+
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.9,
+                maxOutputTokens: 500,
+              },
+            }),
+          }
+        )
+
+        const data = await response.json()
+
+        if (data.error) {
+          throw new Error(data.error.message)
         }
-        demoTurns.push(turn)
-        setSimulationTurns([...demoTurns])
+
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+        if (text) {
+          const jsonMatch = text.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0])
+            const turn: SimulationTurn = {
+              characterId: charId,
+              characterName: char.name,
+              dialogue: parsed.dialogue || '',
+              action: parsed.action || '',
+              emotion: parsed.emotion || '중립',
+            }
+            turns.push(turn)
+            setSimulationTurns([...turns])
+
+            // 대화 히스토리에 추가
+            conversationHistory += `\n${char.name}: "${parsed.dialogue}" (${parsed.action})`
+          }
+        }
+
+        // 0.5초 딜레이
+        await new Promise((r) => setTimeout(r, 500))
+      } catch (error) {
+        console.error('시뮬레이션 턴 실패:', error)
+        break
       }
+    }
+
+    // 에피소드에 시뮬레이션 결과 저장
+    if (selectedEpisodeId && turns.length > 0) {
+      updateProject({
+        episodes: project.episodes.map((ep) =>
+          ep.id === selectedEpisodeId
+            ? {
+                ...ep,
+                simulation: {
+                  turns,
+                  status: 'completed' as const,
+                },
+              }
+            : ep
+        ),
+      })
     }
 
     setIsSimulating(false)
@@ -113,35 +242,17 @@ export default function SimulationTab({ project, updateProject }: Props) {
 
   // 시뮬레이션 중지
   const stopSimulation = () => {
+    stopRef.current = true
     setIsSimulating(false)
   }
+
+  const canProceed = project.episodes.some((ep) => ep.simulation?.status === 'completed')
 
   return (
     <div className="simulation-tab">
       <div className="sim-layout">
         {/* 좌측: 설정 패널 */}
         <div className="sim-setup-panel">
-          {/* API 키 */}
-          <div className="section">
-            <div className="section-header">
-              <span className="icon">🔑</span>
-              <h2>API 설정</h2>
-            </div>
-            <div className="form-group">
-              <label>Claude API 키</label>
-              <input
-                type="password"
-                className="form-input"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Claude API 키를 입력하세요"
-              />
-              <p className="form-hint">
-                시뮬레이션에는 Claude API가 사용됩니다.
-              </p>
-            </div>
-          </div>
-
           {/* 에피소드 선택 */}
           <div className="section">
             <div className="section-header">
@@ -156,6 +267,7 @@ export default function SimulationTab({ project, updateProject }: Props) {
                   onClick={() => setSelectedEpisodeId(ep.id)}
                 >
                   {ep.title}
+                  {ep.simulation?.status === 'completed' && <span className="done-badge">✓</span>}
                 </button>
               ))}
               <button className="add-episode-btn" onClick={addEpisode}>
@@ -204,12 +316,12 @@ export default function SimulationTab({ project, updateProject }: Props) {
                 className="form-input"
                 value={sceneSetup.situation}
                 onChange={(e) => setSceneSetup({ ...sceneSetup, situation: e.target.value })}
-                placeholder="예: 주인공 첫 각성"
+                placeholder="예: 주인공 첫 각성, 우연한 만남"
               />
             </div>
 
             <div className="form-group">
-              <label>참여 캐릭터</label>
+              <label>참여 캐릭터 (2명 이상 선택)</label>
               {project.characters.length > 0 ? (
                 <div className="participant-list">
                   {project.characters.map((char) => (
@@ -231,7 +343,7 @@ export default function SimulationTab({ project, updateProject }: Props) {
             <div className="form-group">
               <label>이벤트 트리거</label>
               <div className="event-options">
-                {['중간에 제3자 등장', '몬스터 출현', '위험 상황 발생', '비밀 폭로'].map((event) => (
+                {['중간에 제3자 등장', '몬스터 출현', '위험 상황 발생', '비밀 폭로', '갈등 발생'].map((event) => (
                   <label key={event} className="event-checkbox">
                     <input
                       type="checkbox"
@@ -245,35 +357,30 @@ export default function SimulationTab({ project, updateProject }: Props) {
             </div>
 
             <div className="form-group">
-              <label>결말 조건</label>
-              <input
-                type="text"
-                className="form-input"
-                value={sceneSetup.endCondition}
-                onChange={(e) => setSceneSetup({ ...sceneSetup, endCondition: e.target.value })}
-                placeholder="예: 첫 몬스터 처치하면 종료"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>최대 턴 수</label>
-              <input
-                type="number"
-                className="form-input"
+              <label>대화 턴 수</label>
+              <select
+                className="form-select"
                 value={maxTurns}
                 onChange={(e) => setMaxTurns(Number(e.target.value))}
-                min={5}
-                max={50}
-              />
+              >
+                <option value={5}>5턴</option>
+                <option value={10}>10턴</option>
+                <option value={15}>15턴</option>
+                <option value={20}>20턴</option>
+              </select>
             </div>
 
             <button
               className="btn-primary start-btn"
               onClick={startSimulation}
-              disabled={isSimulating || project.characters.length === 0}
+              disabled={isSimulating || project.characters.length < 2 || (sceneSetup.participants?.length || 0) < 2}
             >
-              {isSimulating ? '⏳ 시뮬레이션 중...' : '▶ 시뮬레이션 시작'}
+              {isSimulating ? `⏳ 진행 중... (${currentTurn}/${maxTurns})` : '▶ 시뮬레이션 시작'}
             </button>
+
+            {project.characters.length < 2 && (
+              <p className="warning-text">⚠️ 캐릭터가 2명 이상 필요합니다.</p>
+            )}
           </div>
         </div>
 
@@ -282,7 +389,9 @@ export default function SimulationTab({ project, updateProject }: Props) {
           <div className="section">
             <div className="section-header">
               <span className="icon">💬</span>
-              <h2>시뮬레이션 {isSimulating ? `진행 중... (${simulationTurns.length}/${maxTurns})` : '결과'}</h2>
+              <h2>
+                시뮬레이션 {isSimulating ? `진행 중... (${currentTurn}/${maxTurns})` : '결과'}
+              </h2>
               {isSimulating && (
                 <button className="stop-btn" onClick={stopSimulation}>
                   ⏹ 중지
@@ -298,9 +407,13 @@ export default function SimulationTab({ project, updateProject }: Props) {
               ) : (
                 simulationTurns.map((turn, i) => {
                   const char = project.characters.find((c) => c.id === turn.characterId)
+                  const roleColor = char?.role === '주인공' ? '#3b82f6' :
+                    char?.role === '악역' ? '#ef4444' :
+                    char?.role === '조력자' ? '#10b981' : '#7c3aed'
+
                   return (
                     <div key={i} className="dialogue-turn">
-                      <div className="turn-avatar">
+                      <div className="turn-avatar" style={{ background: roleColor }}>
                         {char?.name.charAt(0) || '?'}
                       </div>
                       <div className="turn-content">
@@ -308,9 +421,9 @@ export default function SimulationTab({ project, updateProject }: Props) {
                           <span className="turn-name">{turn.characterName}</span>
                           <span className="turn-emotion">{turn.emotion}</span>
                         </div>
-                        <p className="turn-dialogue">{turn.dialogue}</p>
+                        <p className="turn-dialogue">"{turn.dialogue}"</p>
                         {turn.action && (
-                          <p className="turn-action">{turn.action}</p>
+                          <p className="turn-action">({turn.action})</p>
                         )}
                       </div>
                     </div>
@@ -318,30 +431,18 @@ export default function SimulationTab({ project, updateProject }: Props) {
                 })
               )}
             </div>
-
-            {/* 작가 개입 패널 */}
-            {isSimulating && (
-              <div className="intervention-panel">
-                <h3>🎬 작가 개입</h3>
-                <div className="intervention-options">
-                  <label>
-                    <input type="radio" name="intervention" defaultChecked />
-                    <span>이대로 진행</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="intervention" />
-                    <span>몬스터 지금 등장시키기</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="intervention" />
-                    <span>직접 입력</span>
-                  </label>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* 다음 단계 버튼 */}
+      {canProceed && (
+        <div className="next-step">
+          <button className="btn-primary" onClick={onNext}>
+            다음 단계: 결과 확인 →
+          </button>
+        </div>
+      )}
 
       <style>{`
         .simulation-tab {
@@ -352,7 +453,7 @@ export default function SimulationTab({ project, updateProject }: Props) {
           display: grid;
           grid-template-columns: 380px 1fr;
           gap: 24px;
-          height: calc(100vh - 200px);
+          height: calc(100vh - 240px);
         }
 
         .sim-setup-panel {
@@ -379,6 +480,9 @@ export default function SimulationTab({ project, updateProject }: Props) {
         }
 
         .episode-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid rgba(255, 255, 255, 0.1);
           color: #94a3b8;
@@ -394,6 +498,11 @@ export default function SimulationTab({ project, updateProject }: Props) {
           background: rgba(124, 58, 237, 0.2);
           border-color: rgba(124, 58, 237, 0.4);
           color: #a855f7;
+        }
+
+        .done-badge {
+          color: #10b981;
+          font-weight: bold;
         }
 
         .add-episode-btn {
@@ -443,6 +552,12 @@ export default function SimulationTab({ project, updateProject }: Props) {
           margin-top: 8px;
         }
 
+        .warning-text {
+          color: #f59e0b;
+          font-size: 12px;
+          margin-top: 8px;
+        }
+
         .dialogue-container {
           flex: 1;
           overflow-y: auto;
@@ -478,7 +593,6 @@ export default function SimulationTab({ project, updateProject }: Props) {
           width: 40px;
           height: 40px;
           border-radius: 50%;
-          background: linear-gradient(135deg, #7c3aed, #a855f7);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -538,44 +652,14 @@ export default function SimulationTab({ project, updateProject }: Props) {
           cursor: pointer;
         }
 
-        .intervention-panel {
-          margin-top: 16px;
-          padding: 16px;
-          background: rgba(124, 58, 237, 0.1);
-          border: 1px solid rgba(124, 58, 237, 0.2);
-          border-radius: 8px;
+        .next-step {
+          margin-top: 24px;
+          text-align: center;
         }
 
-        .intervention-panel h3 {
-          font-size: 14px;
-          font-weight: 600;
-          color: #a855f7;
-          margin: 0 0 12px 0;
-        }
-
-        .intervention-options {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .intervention-options label {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 13px;
-          color: #94a3b8;
-          cursor: pointer;
-        }
-
-        .intervention-options input {
-          accent-color: #7c3aed;
-        }
-
-        .form-hint {
-          font-size: 12px;
-          color: #64748b;
-          margin-top: 8px;
+        .next-step .btn-primary {
+          padding: 16px 32px;
+          font-size: 16px;
         }
 
         @media (max-width: 900px) {
