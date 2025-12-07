@@ -1,0 +1,229 @@
+.workspace-dashboard {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dashboard-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.dashboard-header h1 {
+  font-size: 48px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 12px 0;
+  background: linear-gradient(90deg, #00d4ff, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.dashboard-header p {
+  font-size: 18px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.dashboard-cards {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 900px;
+  margin-bottom: 48px;
+}
+
+.dashboard-card {
+  width: 380px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 32px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 20px 20px 0 0;
+}
+
+.whiteboard-card::before {
+  background: linear-gradient(90deg, #00d4ff, #0ea5e9);
+}
+
+.story-card::before {
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+}
+
+.dashboard-card:hover {
+  transform: translateY(-8px);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.whiteboard-card:hover {
+  box-shadow: 0 20px 40px rgba(0, 212, 255, 0.15);
+}
+
+.story-card:hover {
+  box-shadow: 0 20px 40px rgba(124, 58, 237, 0.15);
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.dashboard-card h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 8px 0;
+}
+
+.dashboard-card > p {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0 0 24px 0;
+}
+
+.card-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+}
+
+.card-features li {
+  font-size: 14px;
+  color: #cbd5e1;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-features li::before {
+  content: '✓';
+  color: #10b981;
+  font-weight: bold;
+}
+
+.card-features li:last-child {
+  border-bottom: none;
+}
+
+.card-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.card-action span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #00d4ff;
+  transition: transform 0.2s;
+}
+
+.story-card .card-action span {
+  color: #a855f7;
+}
+
+.dashboard-card:hover .card-action span {
+  transform: translateX(4px);
+}
+
+/* 공유 라이브러리 안내 */
+.shared-library-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 12px;
+  padding: 20px 28px;
+  max-width: 700px;
+  margin-bottom: 48px;
+}
+
+.info-icon {
+  font-size: 32px;
+}
+
+.info-text h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #10b981;
+  margin: 0 0 4px 0;
+}
+
+.info-text p {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* 하단 */
+.dashboard-footer {
+  margin-top: auto;
+}
+
+.back-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+/* 반응형 */
+@media (max-width: 860px) {
+  .dashboard-cards {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .dashboard-card {
+    width: 100%;
+    max-width: 380px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header h1 {
+    font-size: 36px;
+  }
+
+  .dashboard-card {
+    padding: 24px;
+  }
+
+  .shared-library-info {
+    flex-direction: column;
+    text-align: center;
+  }
+}
