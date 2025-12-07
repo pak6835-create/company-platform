@@ -149,40 +149,6 @@ function WorkspaceCanvas() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
 
-  // 그룹 선택 시 자식 노드도 함께 선택하는 핸들러
-  const handleNodesChange = useCallback(
-    (changes: any[]) => {
-      // 먼저 기본 변경 적용
-      onNodesChange(changes)
-
-      // 선택 변경이 있는지 확인
-      const selectionChanges = changes.filter(
-        (c: any) => c.type === 'select' && c.selected === true
-      )
-
-      if (selectionChanges.length > 0) {
-        // 선택된 그룹 노드 찾기
-        const selectedGroupIds = selectionChanges
-          .map((c: any) => nodes.find(n => n.id === c.id))
-          .filter((n: any) => n?.type === 'group')
-          .map((n: any) => n.id)
-
-        if (selectedGroupIds.length > 0) {
-          // 그룹의 자식 노드들도 선택
-          setNodes((nds) =>
-            nds.map((n) => {
-              if (selectedGroupIds.includes(n.parentNode)) {
-                return { ...n, selected: true }
-              }
-              return n
-            })
-          )
-        }
-      }
-    },
-    [onNodesChange, nodes, setNodes]
-  )
-
   // 어셋 추가 이벤트 리스너
   useEffect(() => {
     const handleAssetAdd = (e: Event) => {
@@ -337,138 +303,22 @@ function WorkspaceCanvas() {
     })
   }, [clipboard, getNewNodeId, setNodes])
 
-  // 선택된 노드 그룹화 (parentNode 설정)
-  const groupSelectedNodes = useCallback(() => {
-    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
-    if (selectedNodes.length < 2) return // 2개 이상 선택해야 그룹화 가능
-
-    // 그룹 노드 생성 - 선택된 노드들의 영역을 감싸는 크기로
-    const minX = Math.min(...selectedNodes.map(n => n.position.x))
-    const minY = Math.min(...selectedNodes.map(n => n.position.y))
-    const maxX = Math.max(...selectedNodes.map(n => n.position.x + ((n.style?.width as number) || 200)))
-    const maxY = Math.max(...selectedNodes.map(n => n.position.y + ((n.style?.height as number) || 150)))
-
-    const padding = 20
-    const groupId = getNewNodeId()
-    const groupNode: Node = {
-      id: groupId,
-      type: 'group',
-      position: { x: minX - padding, y: minY - padding },
-      style: {
-        width: maxX - minX + padding * 2,
-        height: maxY - minY + padding * 2,
-        backgroundColor: 'rgba(59, 130, 246, 0.08)',
-        border: '2px dashed #3b82f6',
-        borderRadius: '12px',
-      },
-      data: { label: '그룹' },
-      selectable: true,
-      draggable: true,
-    }
-
-    // 선택된 노드들을 그룹의 자식으로 설정
-    setNodes((nds) => {
-      const updatedNodes = nds.map((n) => {
-        if (selectedNodes.find(s => s.id === n.id)) {
-          return {
-            ...n,
-            parentNode: groupId,
-            extent: 'parent' as const,
-            position: {
-              x: n.position.x - groupNode.position.x,
-              y: n.position.y - groupNode.position.y,
-            },
-            selected: false,
-          }
-        }
-        return n
-      })
-      return [groupNode, ...updatedNodes]
-    })
-  }, [nodes, getNewNodeId, setNodes])
-
-  // 그룹 해제
-  const ungroupSelectedNodes = useCallback(() => {
-    const selectedNodes = nodes.filter((n) => n.selected)
-    const groupNode = selectedNodes.find(n => n.type === 'group')
-    if (!groupNode) return
-
-    // 그룹의 자식 노드들을 찾아서 그룹 해제
-    setNodes((nds) => {
-      return nds
-        .filter(n => n.id !== groupNode.id) // 그룹 노드 제거
-        .map((n) => {
-          if (n.parentNode === groupNode.id) {
-            return {
-              ...n,
-              parentNode: undefined,
-              extent: undefined,
-              position: {
-                x: n.position.x + groupNode.position.x,
-                y: n.position.y + groupNode.position.y,
-              },
-            }
-          }
-          return n
-        })
-    })
-  }, [nodes, setNodes])
-
-  // 그룹 크기 업데이트 헬퍼 함수
-  const updateGroupSize = useCallback((nds: Node[], groupId: string) => {
-    const childNodes = nds.filter(n => n.parentNode === groupId)
-    if (childNodes.length === 0) return nds
-
-    const padding = 20
-    const minX = Math.min(...childNodes.map(n => n.position.x))
-    const minY = Math.min(...childNodes.map(n => n.position.y))
-    const maxX = Math.max(...childNodes.map(n => n.position.x + ((n.style?.width as number) || 200)))
-    const maxY = Math.max(...childNodes.map(n => n.position.y + ((n.style?.height as number) || 150)))
-
-    return nds.map(n => {
-      if (n.id === groupId) {
-        return {
-          ...n,
-          style: {
-            ...n.style,
-            width: maxX - minX + padding * 2,
-            height: maxY - minY + padding * 2,
-          }
-        }
-      }
-      // 자식 노드 위치 조정 (minX, minY를 padding으로)
-      if (n.parentNode === groupId) {
-        return {
-          ...n,
-          position: {
-            x: n.position.x - minX + padding,
-            y: n.position.y - minY + padding,
-          }
-        }
-      }
-      return n
-    })
-  }, [])
-
-  // 선택된 노드들 세로 정렬
+  // 선택된 노드들 세로 정렬 - 첫 번째 노드 기준
   const alignVertical = useCallback(() => {
-    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    const selectedNodes = nodes.filter((n) => n.selected)
     if (selectedNodes.length < 2) return
 
     const gap = 20
-    const padding = 20
+    // Y 위치 기준으로 정렬 (가장 위에 있는 노드가 첫 번째)
     const sorted = [...selectedNodes].sort((a, b) => a.position.y - b.position.y)
-
-    // 그룹 내부 노드인지 확인
-    const parentId = selectedNodes[0].parentNode
-    const allSameParent = selectedNodes.every(n => n.parentNode === parentId)
+    const firstNode = sorted[0]
 
     setNodes((nds) => {
-      // 시작 위치 계산
-      const startX = padding
-      let currentY = padding
+      // 첫 번째 노드의 위치를 기준으로 사용
+      const startX = firstNode.position.x
+      let currentY = firstNode.position.y
 
-      let updatedNodes = nds.map((n) => {
+      return nds.map((n) => {
         const idx = sorted.findIndex(s => s.id === n.id)
         if (idx !== -1) {
           const y = currentY
@@ -477,34 +327,25 @@ function WorkspaceCanvas() {
         }
         return n
       })
-
-      // 그룹 내부 노드면 그룹 크기 업데이트
-      if (allSameParent && parentId) {
-        updatedNodes = updateGroupSize(updatedNodes, parentId)
-      }
-
-      return updatedNodes
     })
-  }, [nodes, setNodes, updateGroupSize])
+  }, [nodes, setNodes])
 
-  // 선택된 노드들 가로 정렬
+  // 선택된 노드들 가로 정렬 - 첫 번째 노드 기준
   const alignHorizontal = useCallback(() => {
-    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    const selectedNodes = nodes.filter((n) => n.selected)
     if (selectedNodes.length < 2) return
 
     const gap = 20
-    const padding = 20
+    // X 위치 기준으로 정렬 (가장 왼쪽에 있는 노드가 첫 번째)
     const sorted = [...selectedNodes].sort((a, b) => a.position.x - b.position.x)
-
-    // 그룹 내부 노드인지 확인
-    const parentId = selectedNodes[0].parentNode
-    const allSameParent = selectedNodes.every(n => n.parentNode === parentId)
+    const firstNode = sorted[0]
 
     setNodes((nds) => {
-      const startY = padding
-      let currentX = padding
+      // 첫 번째 노드의 위치를 기준으로 사용
+      const startY = firstNode.position.y
+      let currentX = firstNode.position.x
 
-      let updatedNodes = nds.map((n) => {
+      return nds.map((n) => {
         const idx = sorted.findIndex(s => s.id === n.id)
         if (idx !== -1) {
           const x = currentX
@@ -513,24 +354,16 @@ function WorkspaceCanvas() {
         }
         return n
       })
-
-      // 그룹 내부 노드면 그룹 크기 업데이트
-      if (allSameParent && parentId) {
-        updatedNodes = updateGroupSize(updatedNodes, parentId)
-      }
-
-      return updatedNodes
     })
-  }, [nodes, setNodes, updateGroupSize])
+  }, [nodes, setNodes])
 
-  // 선택된 노드들 그리드 정렬 (최대 5열) - 노드 크기에 맞춰 딱 붙게 정렬
+  // 선택된 노드들 그리드 정렬 (최대 5열) - 첫 번째 노드 기준
   const alignGrid = useCallback(() => {
-    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    const selectedNodes = nodes.filter((n) => n.selected)
     if (selectedNodes.length < 2) return
 
     const maxCols = 5
     const gap = 15
-    const padding = 20
 
     // 기존 위치 순서대로 정렬
     const sorted = [...selectedNodes].sort((a, b) => {
@@ -539,6 +372,11 @@ function WorkspaceCanvas() {
       if (rowA !== rowB) return rowA - rowB
       return a.position.x - b.position.x
     })
+
+    // 첫 번째 노드의 위치를 기준점으로 사용
+    const firstNode = sorted[0]
+    const startX = firstNode.position.x
+    const startY = firstNode.position.y
 
     // 노드 타입별 기본 크기
     const getNodeSize = (n: Node) => {
@@ -578,25 +416,21 @@ function WorkspaceCanvas() {
       }
     }
 
-    // 그룹 내부 노드인지 확인
-    const parentId = selectedNodes[0].parentNode
-    const allSameParent = selectedNodes.every(n => n.parentNode === parentId)
-
     setNodes((nds) => {
-      let updatedNodes = nds.map((n) => {
+      return nds.map((n) => {
         const idx = sorted.findIndex(s => s.id === n.id)
         if (idx !== -1) {
           const col = idx % maxCols
           const row = Math.floor(idx / maxCols)
 
-          // x 위치: 이전 열들의 너비 합 + gap
-          let x = padding
+          // x 위치: 첫 번째 노드 기준 + 이전 열들의 너비 합 + gap
+          let x = startX
           for (let c = 0; c < col; c++) {
             x += colWidths[c] + gap
           }
 
-          // y 위치: 이전 행들의 높이 합 + gap
-          let y = padding
+          // y 위치: 첫 번째 노드 기준 + 이전 행들의 높이 합 + gap
+          let y = startY
           for (let r = 0; r < row; r++) {
             y += rowHeights[r] + gap
           }
@@ -605,15 +439,8 @@ function WorkspaceCanvas() {
         }
         return n
       })
-
-      // 그룹 내부 노드면 그룹 크기 업데이트
-      if (allSameParent && parentId) {
-        updatedNodes = updateGroupSize(updatedNodes, parentId)
-      }
-
-      return updatedNodes
     })
-  }, [nodes, setNodes, updateGroupSize])
+  }, [nodes, setNodes])
 
   // 키보드 단축키 핸들러
   useEffect(() => {
@@ -682,21 +509,11 @@ function WorkspaceCanvas() {
         e.preventDefault()
         setShowAddPanel((prev) => !prev)
       }
-      // Ctrl+G: 그룹화
-      if ((e.ctrlKey || e.metaKey) && e.key === 'g' && !e.shiftKey) {
-        e.preventDefault()
-        groupSelectedNodes()
-      }
-      // Ctrl+Shift+G: 그룹 해제
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'G') {
-        e.preventDefault()
-        ungroupSelectedNodes()
-      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes, groupSelectedNodes, ungroupSelectedNodes, imagePopup])
+  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes, imagePopup])
 
   // 노드/엣지 변경 시 히스토리 저장 (debounce)
   const lastSaveRef = useRef<string>('')
@@ -926,6 +743,24 @@ function WorkspaceCanvas() {
             style: { width: 440, height: 650 },
           }
           break
+        case 'linkCard':
+          newNode = {
+            id: getNewNodeId(),
+            type: 'linkCard',
+            position,
+            data: { url: '', title: '', favicon: '' },
+            style: { width: 280, height: 120 },
+          }
+          break
+        case 'checklist':
+          newNode = {
+            id: getNewNodeId(),
+            type: 'checklist',
+            position,
+            data: { title: '체크리스트', items: [] },
+            style: { width: 250, height: 200 },
+          }
+          break
         default:
           return
       }
@@ -1002,37 +837,18 @@ function WorkspaceCanvas() {
       event.preventDefault()
       event.stopPropagation()
 
-      // 그룹 노드 우클릭 시 자식 노드들도 선택
-      if (node.type === 'group') {
-        setNodes((nds) =>
-          nds.map((n) => {
-            if (n.id === node.id || n.parentNode === node.id) {
-              return { ...n, selected: true }
-            }
-            return n
-          })
-        )
-        // 그룹은 캔버스 타입 메뉴로 표시 (그룹화/정렬 메뉴)
-        setContextMenu({
-          x: event.clientX,
-          y: event.clientY,
-          type: 'canvas',
-          nodeData: { imageUrl: undefined, prompt: undefined },
-        })
-      } else {
-        setContextMenu({
-          x: event.clientX,
-          y: event.clientY,
-          type: 'node',
-          nodeId: node.id,
-          nodeData: {
-            imageUrl: node.data?.imageUrl || node.data?.resultImage || node.data?.generatedImage,
-            prompt: node.data?.prompt || node.data?.label,
-          },
-        })
-      }
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        type: 'node',
+        nodeId: node.id,
+        nodeData: {
+          imageUrl: node.data?.imageUrl || node.data?.resultImage || node.data?.generatedImage,
+          prompt: node.data?.prompt || node.data?.label,
+        },
+      })
     },
-    [setNodes]
+    []
   )
 
   // 컨텍스트 메뉴 닫기
@@ -1381,6 +1197,35 @@ function WorkspaceCanvas() {
               </div>
             </div>
 
+            {/* 링크 & 체크리스트 */}
+            <div className="add-section">
+              <h4>유틸리티</h4>
+              <div className="draggable-items">
+                <div
+                  className="draggable-item link-card-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'linkCard')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">🔗</span>
+                  <span>링크 카드</span>
+                </div>
+                <div
+                  className="draggable-item checklist-drag"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/reactflow-type', 'checklist')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                >
+                  <span className="drag-icon">☑️</span>
+                  <span>체크리스트</span>
+                </div>
+              </div>
+            </div>
+
             {/* 도형 */}
             <div className="add-section">
               <h4>도형</h4>
@@ -1432,7 +1277,7 @@ function WorkspaceCanvas() {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={handleNodesChange}
+          onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onDragOver={onDragOver}
@@ -1483,16 +1328,21 @@ function WorkspaceCanvas() {
           {contextMenu.type === 'canvas' ? (
             // 캔버스 우클릭 메뉴
             <>
-              {/* 선택된 노드가 있으면 그룹화/정렬 메뉴 먼저 표시 */}
-              {nodes.filter(n => n.selected).length >= 2 && (
+              {/* 선택된 이미지 노드가 있으면 라이브러리 추가 메뉴 표시 */}
+              {nodes.filter(n => n.selected && n.data?.imageUrl).length > 0 && (
                 <>
-                  <div className="context-menu-submenu-title">선택된 노드</div>
                   <div
                     className="context-menu-item"
-                    onClick={() => { groupSelectedNodes(); closeContextMenu(); }}
+                    onClick={handleAddToLibrary}
                   >
-                    📦 그룹화
+                    📚 라이브러리에 추가 ({nodes.filter(n => n.selected && n.data?.imageUrl).length}개)
                   </div>
+                  <div className="context-menu-divider" />
+                </>
+              )}
+              {/* 선택된 노드가 있으면 정렬 메뉴 먼저 표시 */}
+              {nodes.filter(n => n.selected).length >= 2 && (
+                <>
                   <div className="context-menu-submenu-title">정렬</div>
                   <div
                     className="context-menu-item"
@@ -1573,20 +1423,6 @@ function WorkspaceCanvas() {
               {(contextMenu.nodeData?.imageUrl || contextMenu.nodeData?.prompt) && (
                 <div className="context-menu-divider" />
               )}
-              {/* 그룹화 메뉴 */}
-              <div
-                className="context-menu-item"
-                onClick={() => { groupSelectedNodes(); closeContextMenu(); }}
-              >
-                📦 그룹화 (Ctrl+G)
-              </div>
-              <div
-                className="context-menu-item"
-                onClick={() => { ungroupSelectedNodes(); closeContextMenu(); }}
-              >
-                📤 그룹 해제
-              </div>
-              <div className="context-menu-divider" />
               {/* 정렬 메뉴 */}
               <div className="context-menu-submenu-title">정렬</div>
               <div

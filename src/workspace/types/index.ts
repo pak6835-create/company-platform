@@ -99,6 +99,27 @@ export interface PostProcessNodeData {
   selectedOptions?: string[]
 }
 
+// 링크 카드 노드 데이터
+export interface LinkCardNodeData {
+  url: string
+  title?: string
+  description?: string
+  favicon?: string
+}
+
+// 체크리스트 아이템
+export interface ChecklistItem {
+  id: string
+  text: string
+  checked: boolean
+}
+
+// 체크리스트 노드 데이터
+export interface ChecklistNodeData {
+  title: string
+  items: ChecklistItem[]
+}
+
 // 옵션 타입
 export interface NodeOption {
   id: string

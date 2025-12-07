@@ -4,6 +4,8 @@ export { NoteNode } from './NoteNode'
 export { TextNode } from './TextNode'
 export { ShapeNode } from './ShapeNode'
 export { BoardNode } from './BoardNode'
+export { LinkCardNode } from './LinkCardNode'
+export { ChecklistNode } from './ChecklistNode'
 
 // AI 관련 노드
 export { AIGeneratorNode } from './AIGeneratorNode'
@@ -17,6 +19,8 @@ import { NoteNode } from './NoteNode'
 import { TextNode } from './TextNode'
 import { ShapeNode } from './ShapeNode'
 import { BoardNode } from './BoardNode'
+import { LinkCardNode } from './LinkCardNode'
+import { ChecklistNode } from './ChecklistNode'
 import { AIGeneratorNode } from './AIGeneratorNode'
 import { ReferenceNode } from './ReferenceNode'
 import { TransparentBgNode } from './TransparentBgNode'
@@ -28,6 +32,8 @@ export const nodeTypes = {
   text: TextNode,
   shape: ShapeNode,
   board: BoardNode,
+  linkCard: LinkCardNode,
+  checklist: ChecklistNode,
   aiGenerator: AIGeneratorNode,
   reference: ReferenceNode,
   transparentBg: TransparentBgNode,
