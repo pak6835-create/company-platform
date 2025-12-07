@@ -139,6 +139,13 @@ function WorkspaceCanvas() {
     y: number
     asset: Asset
   } | null>(null)
+  // 이미지 팝업 상태
+  const [imagePopup, setImagePopup] = useState<{
+    url: string
+    prompt?: string
+  } | null>(null)
+  // 줌 레벨
+  const [zoomLevel, setZoomLevel] = useState(1)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
 
@@ -655,11 +662,15 @@ function WorkspaceCanvas() {
           setEdges((eds) => eds.filter((e) => !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)))
         }
       }
-      // Escape: 선택 해제
+      // Escape: 선택 해제 / 팝업 닫기
       if (e.key === 'Escape') {
         e.preventDefault()
-        setNodes((nds) => nds.map((n) => ({ ...n, selected: false })))
-        setShowAddPanel(false)
+        if (imagePopup) {
+          setImagePopup(null)
+        } else {
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: false })))
+          setShowAddPanel(false)
+        }
       }
       // L: 라이브러리 토글
       if (e.key === 'l' && !e.ctrlKey && !e.metaKey) {
@@ -685,7 +696,7 @@ function WorkspaceCanvas() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes, groupSelectedNodes, ungroupSelectedNodes])
+  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes, groupSelectedNodes, ungroupSelectedNodes, imagePopup])
 
   // 노드/엣지 변경 시 히스토리 저장 (debounce)
   const lastSaveRef = useRef<string>('')
@@ -725,8 +736,13 @@ function WorkspaceCanvas() {
   // 드래그 앤 드롭
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
-    // 노드 드래그와 파일 드래그, 어셋 드래그 모두 허용
-    event.dataTransfer.dropEffect = 'copy'
+    // effectAllowed에 맞춰 dropEffect 설정
+    const effectAllowed = event.dataTransfer.effectAllowed
+    if (effectAllowed === 'move' || effectAllowed === 'copyMove') {
+      event.dataTransfer.dropEffect = 'move'
+    } else {
+      event.dataTransfer.dropEffect = 'copy'
+    }
   }, [])
 
   const onDrop = useCallback(
@@ -920,11 +936,17 @@ function WorkspaceCanvas() {
     [reactFlowInstance, workspaceData, setNodes, setWorkspaceData, addImageToCanvas, getNewNodeId, boardNameChangeRef]
   )
 
-  // 보드 노드 더블클릭 핸들러
+  // 노드 더블클릭 핸들러 (보드, 이미지)
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (node.type === 'board' && node.data.boardId) {
         navigateToBoard(node.data.boardId)
+      } else if (node.type === 'image' && node.data.imageUrl) {
+        // 이미지 노드 더블클릭 시 팝업 열기
+        setImagePopup({
+          url: node.data.imageUrl,
+          prompt: node.data.prompt || node.data.label
+        })
       }
     },
     [navigateToBoard]
@@ -1419,8 +1441,11 @@ function WorkspaceCanvas() {
           onPaneContextMenu={onPaneContextMenu}
           onNodeContextMenu={onNodeContextMenu}
           onSelectionContextMenu={onSelectionContextMenu}
+          onMove={(_, viewport) => setZoomLevel(viewport.zoom)}
           nodeTypes={nodeTypes}
           fitView
+          minZoom={0.05}
+          maxZoom={4}
           deleteKeyCode={['Backspace', 'Delete']}
           selectionOnDrag
           selectionMode={SelectionMode.Partial}
@@ -1430,6 +1455,10 @@ function WorkspaceCanvas() {
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e5e7eb" />
           <Controls />
           <MiniMap />
+          {/* 줌 레벨 표시 */}
+          <div className="zoom-indicator">
+            {Math.round(zoomLevel * 100)}%
+          </div>
         </ReactFlow>
       </div>
 
@@ -1694,6 +1723,51 @@ function WorkspaceCanvas() {
         </div>
       )}
 
+      {/* 이미지 팝업 */}
+      {imagePopup && (
+        <div
+          className="image-popup-overlay"
+          onClick={() => setImagePopup(null)}
+        >
+          <div className="image-popup-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="image-popup-close"
+              onClick={() => setImagePopup(null)}
+              title="닫기 (ESC)"
+            >
+              ×
+            </button>
+            <img src={imagePopup.url} alt="이미지" />
+            {imagePopup.prompt && (
+              <div className="image-popup-prompt">
+                <span>{imagePopup.prompt}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(imagePopup.prompt || '')
+                    alert('프롬프트가 복사되었습니다!')
+                  }}
+                  title="프롬프트 복사"
+                >
+                  📋
+                </button>
+              </div>
+            )}
+            <div className="image-popup-actions">
+              <button
+                onClick={() => {
+                  const link = document.createElement('a')
+                  link.href = imagePopup.url
+                  link.download = `image-${Date.now()}.png`
+                  link.click()
+                }}
+              >
+                ⬇️ 다운로드
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 오른쪽 라이브러리 사이드바 */}
       <div
         className={`asset-sidebar ${showAssetLibrary ? 'open' : ''}`}
@@ -1881,8 +1955,9 @@ function WorkspaceCanvas() {
                     <div
                       key={asset.id}
                       className="asset-sidebar-item"
-                      title="우클릭: 프롬프트 복사 메뉴"
+                      title="더블클릭: 크게 보기 / 우클릭: 프롬프트 복사 메뉴"
                       draggable
+                      onDoubleClick={() => setImagePopup({ url: asset.url, prompt: asset.prompt })}
                       onDragStart={(e) => {
                         const data = JSON.stringify({
                           type: 'asset',
