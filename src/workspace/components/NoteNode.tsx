@@ -42,14 +42,38 @@ export function NoteNode({ id, data, selected }: NodeProps<NoteNodeData>) {
     }
   }
 
+  // 리사이즈 핸들러
+  const handleResize = (_: unknown, params: { width: number; height: number }) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === id) {
+          return {
+            ...node,
+            style: { ...node.style, width: params.width, height: params.height },
+          }
+        }
+        return node
+      })
+    )
+  }
+
   return (
     <div
       className={`note-node ${selected ? 'selected' : ''}`}
-      style={{ backgroundColor: data.backgroundColor || '#fef3c7' }}
+      style={{
+        backgroundColor: data.backgroundColor || '#fef3c7',
+        width: '100%',
+        height: '100%',
+      }}
       onDoubleClick={() => setIsEditing(true)}
     >
       <Handle type="target" position={Position.Left} id="note-in" />
-      <NodeResizer isVisible={selected} minWidth={150} minHeight={100} />
+      <NodeResizer
+        isVisible={selected}
+        minWidth={150}
+        minHeight={100}
+        onResize={handleResize}
+      />
       {isEditing ? (
         <textarea
           ref={textareaRef}

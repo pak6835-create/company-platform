@@ -623,34 +623,28 @@
   font-family: inherit;
 }
 
-/* React Flow 핸들 */
-.image-node .react-flow__handle,
-.note-node .react-flow__handle {
-  width: 8px;
-  height: 8px;
+/* React Flow 연결 핸들 스타일 */
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
   background: #3b82f6;
   border: 2px solid white;
-  opacity: 0;
-  transition: opacity 0.2s;
+  border-radius: 50%;
 }
 
-.image-node:hover .react-flow__handle,
-.image-node.selected .react-flow__handle,
-.note-node:hover .react-flow__handle,
-.note-node.selected .react-flow__handle {
-  opacity: 1;
+.react-flow__handle:hover {
+  width: 12px;
+  height: 12px;
 }
 
 /* NodeResizer 스타일 */
-.react-flow__resize-control.handle {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.react-flow__resize-control {
   background: white;
   border: 2px solid #3b82f6;
+  border-radius: 2px;
 }
 
-.react-flow__resize-control.handle:hover {
+.react-flow__resize-control:hover {
   background: #3b82f6;
 }
 
@@ -2857,14 +2851,20 @@
   margin-top: 2px;
 }
 
-/* ==================== 노드 호버 리사이즈 ==================== */
-.react-flow__node:hover .react-flow__resize-control {
+/* ==================== 노드 호버/선택 리사이즈 ==================== */
+.react-flow__node:hover .react-flow__resize-control,
+.react-flow__node.selected .react-flow__resize-control {
   opacity: 1 !important;
 }
 
 .react-flow__resize-control {
   opacity: 0;
   transition: opacity 0.2s;
+}
+
+/* 선택된 노드의 리사이즈 핸들 표시 */
+.react-flow__node.selected .react-flow__resize-control.handle {
+  opacity: 1 !important;
 }
 
 /* 호버 시 노드 테두리 강조 */
@@ -4708,4 +4708,13 @@
   height: 1px;
   background: #444;
   margin: 4px 0;
+}
+
+.context-menu-submenu-title {
+  padding: 6px 12px 4px;
+  color: #888;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }

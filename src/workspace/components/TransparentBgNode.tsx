@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
 import { editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, ImageSize } from '../utils/geminiApi'
 
@@ -29,9 +29,8 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number })
 }
 
 export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentBgNodeData>) {
-  const { setNodes, setEdges } = useReactFlow()
+  const { setNodes, setEdges, getNodes } = useReactFlow()
   const edges = useStore((state) => state.edges) || []
-  const nodes = useStore((state) => state.getNodes()) || []
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [apiKey, setApiKey] = useState(data.apiKey || '')
@@ -56,31 +55,34 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
     )
   }, [apiKey, id, setNodes])
 
+  // 연결된 엣지 ID 추적 (안정적인 의존성)
+  const connectedEdgeId = useMemo(() => {
+    if (!Array.isArray(edges)) return null
+    const edge = edges.find((e) => e.target === id && e.targetHandle === 'image-in')
+    return edge?.source || null
+  }, [edges, id])
+
   // 연결된 이미지 노드에서 이미지 가져오기
   useEffect(() => {
-    if (!Array.isArray(edges) || !Array.isArray(nodes)) return
-
-    const incomingEdge = edges.find(
-      (edge) => edge.target === id && edge.targetHandle === 'image-in'
-    )
-
-    if (incomingEdge) {
-      const sourceNode = nodes.find((n) => n.id === incomingEdge.source)
-      if (sourceNode) {
-        const imageUrl = sourceNode.data?.imageUrl ||
-                        sourceNode.data?.url ||
-                        sourceNode.data?.resultImage ||
-                        sourceNode.data?.generatedImage
-        if (imageUrl) {
-          setConnectedImage(imageUrl)
-          // 노드 연결 시 업로드 이미지 삭제
-          setUploadedImage(null)
-        }
-      }
-    } else {
+    if (!connectedEdgeId) {
       setConnectedImage(null)
+      return
     }
-  }, [edges, nodes, id])
+
+    const nodes = getNodes()
+    const sourceNode = nodes.find((n) => n.id === connectedEdgeId)
+    if (sourceNode) {
+      const imageUrl = sourceNode.data?.imageUrl ||
+                      sourceNode.data?.url ||
+                      sourceNode.data?.resultImage ||
+                      sourceNode.data?.generatedImage
+      if (imageUrl) {
+        setConnectedImage(imageUrl)
+        // 노드 연결 시 업로드 이미지 삭제
+        setUploadedImage(null)
+      }
+    }
+  }, [connectedEdgeId, getNodes])
 
   // 이미지 업로드 시 노드 연결 끊기
   const handleImageUpload = (imageUrl: string) => {

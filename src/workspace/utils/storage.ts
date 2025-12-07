@@ -57,11 +57,58 @@ export const loadWorkspaceData = (): WorkspaceData => {
   return createInitialData()
 }
 
-// 데이터 저장
+// 노드 데이터에서 큰 base64 이미지 제거 (저장 용량 절약)
+const sanitizeNodeData = (node: Record<string, unknown>) => {
+  const sanitized = { ...node }
+  if (sanitized.data && typeof sanitized.data === 'object') {
+    const data = { ...(sanitized.data as Record<string, unknown>) }
+    // base64 이미지 데이터 필터링 (10KB 이상)
+    Object.keys(data).forEach((key) => {
+      const value = data[key]
+      if (typeof value === 'string' && value.startsWith('data:image/') && value.length > 10000) {
+        data[key] = '' // 큰 이미지 데이터 제거
+      }
+    })
+    sanitized.data = data
+  }
+  return sanitized
+}
+
+// 데이터 저장 (큰 이미지 제외)
 export const saveWorkspaceData = (data: WorkspaceData) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    // 저장 전 큰 이미지 데이터 제거
+    const sanitizedData = {
+      ...data,
+      boards: Object.fromEntries(
+        Object.entries(data.boards).map(([id, board]) => [
+          id,
+          {
+            ...board,
+            nodes: board.nodes.map((node) => sanitizeNodeData(node as Record<string, unknown>)),
+          },
+        ])
+      ),
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedData))
   } catch (e) {
     console.error('Failed to save workspace data:', e)
+    // 용량 초과 시 오래된 보드 정리 시도
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      console.warn('Storage quota exceeded, clearing old data...')
+      try {
+        // 현재 보드만 저장
+        const minimalData = {
+          ...data,
+          boards: {
+            [data.currentBoardId]: data.boards[data.currentBoardId],
+          },
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(minimalData))
+      } catch {
+        // 그래도 실패하면 초기화
+        localStorage.removeItem(STORAGE_KEY)
+      }
+    }
   }
 }

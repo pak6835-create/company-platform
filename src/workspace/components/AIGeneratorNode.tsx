@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
 import { generateImage, editImage, extractAlpha, loadImageData, imageDataToUrl, MODELS, IMAGE_SIZES, ASPECT_RATIOS } from '../utils/geminiApi'
@@ -155,6 +156,7 @@ const DEFAULT_CHARACTER = {
 
 // 어셋 라이브러리 이벤트
 const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number }) => {
+  console.log('[AIGeneratorNode] 라이브러리에 이미지 추가:', asset.url.slice(0, 50))
   window.dispatchEvent(new CustomEvent('asset-add', { detail: asset }))
 }
 
@@ -186,6 +188,13 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
   // 직접 프롬프트 입력 모드
   const [useCustomPrompt, setUseCustomPrompt] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
+  // 이미지 컨텍스트 메뉴
+  const [imageContextMenu, setImageContextMenu] = useState<{
+    x: number
+    y: number
+    prompt: string
+    url: string
+  } | null>(null)
 
   // 노드 데이터 업데이트 (API 키와 모델만 저장 - 이미지는 메모리에만)
   useEffect(() => {
@@ -330,6 +339,59 @@ Important: Only ONE character, full body clearly visible, white background only.
     []
   )
 
+  // 프롬프트를 카테고리별로 파싱하는 함수
+  const parsePromptByCategory = useCallback((prompt: string) => {
+    const categories: Record<string, string> = {
+      '전체': prompt,
+      '캐릭터 상세': '',
+      '머리카락': '',
+      '의상': '',
+      '악세서리': '',
+      '무기': '',
+      '아트 스타일': '',
+      '배경': '',
+    }
+
+    // Character Details 섹션 추출
+    const charMatch = prompt.match(/Character Details:\n([\s\S]*?)(?=\n\nHair:|$)/)
+    if (charMatch) categories['캐릭터 상세'] = charMatch[1].trim()
+
+    // Hair 섹션 추출
+    const hairMatch = prompt.match(/Hair:\s*([^\n]+)/)
+    if (hairMatch) categories['머리카락'] = hairMatch[1].trim()
+
+    // Outfit 섹션 추출
+    const outfitMatch = prompt.match(/Outfit:\s*([^\n]+)/)
+    if (outfitMatch) categories['의상'] = outfitMatch[1].trim()
+
+    // Accessories 섹션 추출
+    const accMatch = prompt.match(/Accessories:\s*([^\n]+)/)
+    if (accMatch) categories['악세서리'] = accMatch[1].trim()
+
+    // Weapon 섹션 추출
+    const weaponMatch = prompt.match(/Weapon:\s*([^\n]+)/)
+    if (weaponMatch) categories['무기'] = weaponMatch[1].trim()
+
+    // Art Style 섹션 추출
+    const styleMatch = prompt.match(/Art Style:\s*([^\n]+)/)
+    if (styleMatch) categories['아트 스타일'] = styleMatch[1].trim()
+
+    // Background 섹션 추출
+    const bgMatch = prompt.match(/Background:\s*([^\n]+)/)
+    if (bgMatch) categories['배경'] = bgMatch[1].trim()
+
+    return categories
+  }, [])
+
+  // 컨텍스트 메뉴 닫기
+  useEffect(() => {
+    const handleClick = () => setImageContextMenu(null)
+    if (imageContextMenu) {
+      window.addEventListener('click', handleClick)
+      return () => window.removeEventListener('click', handleClick)
+    }
+  }, [imageContextMenu])
+
   // ==================== AI 이미지 생성 ====================
   // 공통 API 함수는 utils/geminiApi.ts 사용
 
@@ -368,8 +430,9 @@ Important: Only ONE character, full body clearly visible, white background only.
 
       // 투명 배경 생성이 꺼져있으면 여기서 끝
       if (!generateTransparent) {
-        const newImage = { url: whiteResult.url, prompt: finalPrompt.slice(0, 50) + '...' }
+        const newImage = { url: whiteResult.url, prompt: finalPrompt }
         setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
+        // 라이브러리에 자동 추가
         emitAssetAdd({ url: whiteResult.url, prompt: finalPrompt, timestamp: Date.now() })
         setGenerationStatus('✅ 완료!')
         return
@@ -397,14 +460,11 @@ Important: Only ONE character, full body clearly visible, white background only.
       const resultData = extractAlpha(whiteData, blackData)
       const transparentUrl = imageDataToUrl(resultData)
 
-      const newImage = { url: transparentUrl, prompt: finalPrompt.slice(0, 50) + '...' }
+      const newImage = { url: transparentUrl, prompt: finalPrompt }
       setGeneratedImages((prev) => [newImage, ...prev].slice(0, 20))
+      // 라이브러리에 자동 추가
       emitAssetAdd({ url: transparentUrl, prompt: finalPrompt, timestamp: Date.now() })
       setGenerationStatus('✅ 투명 배경 완료!')
-
-      if (data.onGenerate) {
-        data.onGenerate(transparentUrl, finalPrompt.slice(0, 30) + '...')
-      }
     } catch (err) {
       console.error('이미지 생성 오류:', err)
       setError(err instanceof Error ? err.message : '생성 실패')
@@ -1075,7 +1135,7 @@ Important: Only ONE character, full body clearly visible, white background only.
                 </button>
               )}
             </div>
-            <div className="gallery-scroll">
+            <div className="gallery-scroll nopan">
               {generatedImages.length === 0 ? (
                 <div className="gallery-empty">
                   <p>생성된 이미지가<br/>여기에 표시됩니다</p>
@@ -1084,38 +1144,72 @@ Important: Only ONE character, full body clearly visible, white background only.
                 generatedImages.map((img, idx) => (
                   <div
                     key={idx}
-                    className="gallery-item"
-                    draggable
+                    className="gallery-item nopan nodrag"
+                    draggable={true}
                     onDragStart={(e) => {
-                      e.dataTransfer.setData('application/json', JSON.stringify({
+                      e.stopPropagation()
+                      // 드래그 데이터 설정 (라이브러리와 동일한 방식)
+                      const data = JSON.stringify({
                         type: 'asset',
                         url: img.url,
                         prompt: img.prompt
-                      }))
+                      })
+                      e.dataTransfer.setData('application/json', data)
+                      e.dataTransfer.setData('text/plain', data)
                       e.dataTransfer.effectAllowed = 'copy'
+                      // 드래그 이미지 설정
+                      const dragImg = e.currentTarget.querySelector('img')
+                      if (dragImg) {
+                        e.dataTransfer.setDragImage(dragImg, 50, 50)
+                      }
                     }}
+                    onDrag={(e) => e.stopPropagation()}
+                    onDragEnd={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setImageContextMenu({
+                        x: e.clientX,
+                        y: e.clientY,
+                        prompt: img.prompt,
+                        url: img.url
+                      })
+                    }}
+                    style={{ cursor: 'grab' }}
                   >
                     <img
                       src={img.url}
                       alt={`생성 ${idx + 1}`}
-                      onClick={() => window.open(img.url, '_blank')}
-                      title={img.prompt}
+                      title="드래그하여 화이트보드에 추가 / 우클릭: 프롬프트 복사"
                       draggable={false}
                     />
-                    <div className="gallery-item-actions">
+                    <div className="gallery-item-actions" onMouseDown={(e) => e.stopPropagation()}>
                       <button
                         className="action-btn"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          window.open(img.url, '_blank')
+                        }}
+                        title="크게 보기"
+                      >
+                        🔍
+                      </button>
+                      <button
+                        className="action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
                           navigator.clipboard.writeText(img.prompt || '')
                           alert('프롬프트가 복사되었습니다!')
                         }}
-                        title="프롬프트 복사"
+                        title="전체 프롬프트 복사"
                       >
                         📋
                       </button>
                       <button
                         className="action-btn"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
                           const link = document.createElement('a')
                           link.href = img.url
                           link.download = `character-${Date.now()}.png`
@@ -1183,6 +1277,104 @@ Important: Only ONE character, full body clearly visible, white background only.
       </div>
 
       <Handle type="source" position={Position.Right} id="image-out" />
+
+      {/* 이미지 컨텍스트 메뉴 (카테고리별 프롬프트 복사) - 포탈로 렌더링 */}
+      {imageContextMenu && createPortal(
+        <div
+          className="prompt-context-menu"
+          style={{
+            position: 'fixed',
+            left: imageContextMenu.x,
+            top: imageContextMenu.y,
+            zIndex: 10000,
+            background: '#1a1a2e',
+            border: '1px solid #444',
+            borderRadius: 8,
+            padding: 4,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+            minWidth: 180,
+            maxHeight: 400,
+            overflowY: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: '6px 10px', fontSize: 11, color: '#888', borderBottom: '1px solid #333' }}>
+            📋 프롬프트 복사
+          </div>
+          {Object.entries(parsePromptByCategory(imageContextMenu.prompt)).map(([category, content]) => {
+            if (!content) return null
+            return (
+              <div
+                key={category}
+                className="context-menu-item"
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  color: '#e0e0e0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#2a2a4e'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+                onClick={() => {
+                  navigator.clipboard.writeText(content)
+                  setImageContextMenu(null)
+                  console.log(`[${category}] 복사됨:`, content.slice(0, 50) + '...')
+                }}
+              >
+                <span style={{ color: category === '전체' ? '#4ade80' : '#94a3b8' }}>
+                  {category === '전체' ? '📄' :
+                   category === '캐릭터 상세' ? '👤' :
+                   category === '머리카락' ? '💇' :
+                   category === '의상' ? '👕' :
+                   category === '악세서리' ? '💍' :
+                   category === '무기' ? '⚔️' :
+                   category === '아트 스타일' ? '🎨' :
+                   category === '배경' ? '🖼️' : '📝'}
+                </span>
+                <span>{category}</span>
+              </div>
+            )
+          })}
+          <div style={{ borderTop: '1px solid #333', marginTop: 4, paddingTop: 4 }}>
+            <div
+              className="context-menu-item"
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontSize: 12,
+                color: '#e0e0e0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#2a2a4e'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
+              onClick={() => {
+                const link = document.createElement('a')
+                link.href = imageContextMenu.url
+                link.download = `character-${Date.now()}.png`
+                link.click()
+                setImageContextMenu(null)
+              }}
+            >
+              <span>⬇️</span>
+              <span>이미지 다운로드</span>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow, useStore } from 'reactflow'
 import { editImage, MODELS, extractAlpha, loadImageData, imageDataToUrl, AspectRatio, ImageSize } from '../utils/geminiApi'
 
@@ -37,9 +37,8 @@ const emitAssetAdd = (asset: { url: string; prompt: string; timestamp: number; c
 }
 
 export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeData>) {
-  const { setNodes, setEdges } = useReactFlow()
+  const { setNodes, setEdges, getNodes } = useReactFlow()
   const edges = useStore((state) => state.edges) || []
-  const nodes = useStore((state) => state.getNodes()) || []
 
   const poseInputRef = useRef<HTMLInputElement>(null)
   const characterInputRef = useRef<HTMLInputElement>(null)
@@ -74,57 +73,61 @@ export function PoseChangeNode({ data, selected, id }: NodeProps<PoseChangeNodeD
     )
   }, [apiKey, id, setNodes])
 
+  // 연결된 캐릭터 엣지 ID 추적 (안정적인 의존성)
+  const connectedCharacterEdgeId = useMemo(() => {
+    if (!Array.isArray(edges)) return null
+    const edge = edges.find((e) => e.target === id && e.targetHandle === 'character-in')
+    return edge?.source || null
+  }, [edges, id])
+
+  // 연결된 포즈 엣지 ID 추적 (안정적인 의존성)
+  const connectedPoseEdgeId = useMemo(() => {
+    if (!Array.isArray(edges)) return null
+    const edge = edges.find((e) => e.target === id && e.targetHandle === 'pose-in')
+    return edge?.source || null
+  }, [edges, id])
+
   // 연결된 캐릭터 노드에서 이미지 가져오기
   useEffect(() => {
-    if (!Array.isArray(edges) || !Array.isArray(nodes)) return
-
-    const incomingEdge = edges.find(
-      (edge) => edge.target === id && edge.targetHandle === 'character-in'
-    )
-
-    if (incomingEdge) {
-      const sourceNode = nodes.find((n) => n.id === incomingEdge.source)
-      if (sourceNode) {
-        const imageUrl = sourceNode.data?.imageUrl ||
-                        sourceNode.data?.url ||
-                        sourceNode.data?.resultImage ||
-                        sourceNode.data?.generatedImage
-        if (imageUrl) {
-          setConnectedImage(imageUrl)
-          // 노드 연결 시 업로드 이미지 삭제
-          setUploadedCharacter(null)
-        }
-      }
-    } else {
+    if (!connectedCharacterEdgeId) {
       setConnectedImage(null)
+      return
     }
-  }, [edges, nodes, id])
+
+    const nodes = getNodes()
+    const sourceNode = nodes.find((n) => n.id === connectedCharacterEdgeId)
+    if (sourceNode) {
+      const imageUrl = sourceNode.data?.imageUrl ||
+                      sourceNode.data?.url ||
+                      sourceNode.data?.resultImage ||
+                      sourceNode.data?.generatedImage
+      if (imageUrl) {
+        setConnectedImage(imageUrl)
+        setUploadedCharacter(null)
+      }
+    }
+  }, [connectedCharacterEdgeId, getNodes])
 
   // 연결된 포즈 노드에서 이미지 가져오기
   useEffect(() => {
-    if (!Array.isArray(edges) || !Array.isArray(nodes)) return
-
-    const incomingEdge = edges.find(
-      (edge) => edge.target === id && edge.targetHandle === 'pose-in'
-    )
-
-    if (incomingEdge) {
-      const sourceNode = nodes.find((n) => n.id === incomingEdge.source)
-      if (sourceNode) {
-        const imageUrl = sourceNode.data?.imageUrl ||
-                        sourceNode.data?.url ||
-                        sourceNode.data?.resultImage ||
-                        sourceNode.data?.generatedImage
-        if (imageUrl) {
-          setConnectedPose(imageUrl)
-          // 노드 연결 시 업로드 이미지 삭제
-          setUploadedPose(null)
-        }
-      }
-    } else {
+    if (!connectedPoseEdgeId) {
       setConnectedPose(null)
+      return
     }
-  }, [edges, nodes, id])
+
+    const nodes = getNodes()
+    const sourceNode = nodes.find((n) => n.id === connectedPoseEdgeId)
+    if (sourceNode) {
+      const imageUrl = sourceNode.data?.imageUrl ||
+                      sourceNode.data?.url ||
+                      sourceNode.data?.resultImage ||
+                      sourceNode.data?.generatedImage
+      if (imageUrl) {
+        setConnectedPose(imageUrl)
+        setUploadedPose(null)
+      }
+    }
+  }, [connectedPoseEdgeId, getNodes])
 
   // 캐릭터 업로드 시 노드 연결 끊기
   const handleCharacterUpload = (imageUrl: string) => {

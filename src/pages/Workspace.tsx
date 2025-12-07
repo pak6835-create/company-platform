@@ -133,20 +133,115 @@ function WorkspaceCanvas() {
   const [selectedCategory, setSelectedCategory] = useState('default')
   const [showCategoryInput, setShowCategoryInput] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  // 라이브러리 어셋 컨텍스트 메뉴
+  const [assetContextMenu, setAssetContextMenu] = useState<{
+    x: number
+    y: number
+    asset: Asset
+  } | null>(null)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
+
+  // 그룹 선택 시 자식 노드도 함께 선택하는 핸들러
+  const handleNodesChange = useCallback(
+    (changes: any[]) => {
+      // 먼저 기본 변경 적용
+      onNodesChange(changes)
+
+      // 선택 변경이 있는지 확인
+      const selectionChanges = changes.filter(
+        (c: any) => c.type === 'select' && c.selected === true
+      )
+
+      if (selectionChanges.length > 0) {
+        // 선택된 그룹 노드 찾기
+        const selectedGroupIds = selectionChanges
+          .map((c: any) => nodes.find(n => n.id === c.id))
+          .filter((n: any) => n?.type === 'group')
+          .map((n: any) => n.id)
+
+        if (selectedGroupIds.length > 0) {
+          // 그룹의 자식 노드들도 선택
+          setNodes((nds) =>
+            nds.map((n) => {
+              if (selectedGroupIds.includes(n.parentNode)) {
+                return { ...n, selected: true }
+              }
+              return n
+            })
+          )
+        }
+      }
+    },
+    [onNodesChange, nodes, setNodes]
+  )
 
   // 어셋 추가 이벤트 리스너
   useEffect(() => {
     const handleAssetAdd = (e: Event) => {
       const { url, prompt, timestamp, category } = (e as CustomEvent).detail
+      console.log('[Workspace] asset-add 이벤트 수신:', url?.slice(0, 50))
       setAssets(prev => [
         { id: `asset-${timestamp}`, url, prompt, timestamp, category: category || 'default' },
         ...prev
       ].slice(0, 50)) // 최대 50개로 제한
     }
     window.addEventListener('asset-add', handleAssetAdd)
+    console.log('[Workspace] asset-add 이벤트 리스너 등록')
     return () => window.removeEventListener('asset-add', handleAssetAdd)
+  }, [])
+
+  // 어셋 컨텍스트 메뉴 닫기
+  useEffect(() => {
+    const handleClick = () => setAssetContextMenu(null)
+    if (assetContextMenu) {
+      window.addEventListener('click', handleClick)
+      return () => window.removeEventListener('click', handleClick)
+    }
+  }, [assetContextMenu])
+
+  // 프롬프트를 카테고리별로 파싱하는 함수
+  const parsePromptByCategory = useCallback((prompt: string) => {
+    const categories: Record<string, string> = {
+      '전체': prompt,
+      '캐릭터 상세': '',
+      '머리카락': '',
+      '의상': '',
+      '악세서리': '',
+      '무기': '',
+      '아트 스타일': '',
+      '배경': '',
+    }
+
+    // Character Details 섹션 추출
+    const charMatch = prompt.match(/Character Details:\n([\s\S]*?)(?=\n\nHair:|$)/)
+    if (charMatch) categories['캐릭터 상세'] = charMatch[1].trim()
+
+    // Hair 섹션 추출
+    const hairMatch = prompt.match(/Hair:\s*([^\n]+)/)
+    if (hairMatch) categories['머리카락'] = hairMatch[1].trim()
+
+    // Outfit 섹션 추출
+    const outfitMatch = prompt.match(/Outfit:\s*([^\n]+)/)
+    if (outfitMatch) categories['의상'] = outfitMatch[1].trim()
+
+    // Accessories 섹션 추출
+    const accMatch = prompt.match(/Accessories:\s*([^\n]+)/)
+    if (accMatch) categories['악세서리'] = accMatch[1].trim()
+
+    // Weapon 섹션 추출
+    const weaponMatch = prompt.match(/Weapon:\s*([^\n]+)/)
+    if (weaponMatch) categories['무기'] = weaponMatch[1].trim()
+
+    // Art Style 섹션 추출
+    const styleMatch = prompt.match(/Art Style:\s*([^\n]+)/)
+    if (styleMatch) categories['아트 스타일'] = styleMatch[1].trim()
+
+    // Background 섹션 추출
+    const bgMatch = prompt.match(/Background:\s*([^\n]+)/)
+    if (bgMatch) categories['배경'] = bgMatch[1].trim()
+
+    return categories
   }, [])
 
   // 실행취소/다시실행 히스토리
@@ -235,6 +330,284 @@ function WorkspaceCanvas() {
     })
   }, [clipboard, getNewNodeId, setNodes])
 
+  // 선택된 노드 그룹화 (parentNode 설정)
+  const groupSelectedNodes = useCallback(() => {
+    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    if (selectedNodes.length < 2) return // 2개 이상 선택해야 그룹화 가능
+
+    // 그룹 노드 생성 - 선택된 노드들의 영역을 감싸는 크기로
+    const minX = Math.min(...selectedNodes.map(n => n.position.x))
+    const minY = Math.min(...selectedNodes.map(n => n.position.y))
+    const maxX = Math.max(...selectedNodes.map(n => n.position.x + ((n.style?.width as number) || 200)))
+    const maxY = Math.max(...selectedNodes.map(n => n.position.y + ((n.style?.height as number) || 150)))
+
+    const padding = 20
+    const groupId = getNewNodeId()
+    const groupNode: Node = {
+      id: groupId,
+      type: 'group',
+      position: { x: minX - padding, y: minY - padding },
+      style: {
+        width: maxX - minX + padding * 2,
+        height: maxY - minY + padding * 2,
+        backgroundColor: 'rgba(59, 130, 246, 0.08)',
+        border: '2px dashed #3b82f6',
+        borderRadius: '12px',
+      },
+      data: { label: '그룹' },
+      selectable: true,
+      draggable: true,
+    }
+
+    // 선택된 노드들을 그룹의 자식으로 설정
+    setNodes((nds) => {
+      const updatedNodes = nds.map((n) => {
+        if (selectedNodes.find(s => s.id === n.id)) {
+          return {
+            ...n,
+            parentNode: groupId,
+            extent: 'parent' as const,
+            position: {
+              x: n.position.x - groupNode.position.x,
+              y: n.position.y - groupNode.position.y,
+            },
+            selected: false,
+          }
+        }
+        return n
+      })
+      return [groupNode, ...updatedNodes]
+    })
+  }, [nodes, getNewNodeId, setNodes])
+
+  // 그룹 해제
+  const ungroupSelectedNodes = useCallback(() => {
+    const selectedNodes = nodes.filter((n) => n.selected)
+    const groupNode = selectedNodes.find(n => n.type === 'group')
+    if (!groupNode) return
+
+    // 그룹의 자식 노드들을 찾아서 그룹 해제
+    setNodes((nds) => {
+      return nds
+        .filter(n => n.id !== groupNode.id) // 그룹 노드 제거
+        .map((n) => {
+          if (n.parentNode === groupNode.id) {
+            return {
+              ...n,
+              parentNode: undefined,
+              extent: undefined,
+              position: {
+                x: n.position.x + groupNode.position.x,
+                y: n.position.y + groupNode.position.y,
+              },
+            }
+          }
+          return n
+        })
+    })
+  }, [nodes, setNodes])
+
+  // 그룹 크기 업데이트 헬퍼 함수
+  const updateGroupSize = useCallback((nds: Node[], groupId: string) => {
+    const childNodes = nds.filter(n => n.parentNode === groupId)
+    if (childNodes.length === 0) return nds
+
+    const padding = 20
+    const minX = Math.min(...childNodes.map(n => n.position.x))
+    const minY = Math.min(...childNodes.map(n => n.position.y))
+    const maxX = Math.max(...childNodes.map(n => n.position.x + ((n.style?.width as number) || 200)))
+    const maxY = Math.max(...childNodes.map(n => n.position.y + ((n.style?.height as number) || 150)))
+
+    return nds.map(n => {
+      if (n.id === groupId) {
+        return {
+          ...n,
+          style: {
+            ...n.style,
+            width: maxX - minX + padding * 2,
+            height: maxY - minY + padding * 2,
+          }
+        }
+      }
+      // 자식 노드 위치 조정 (minX, minY를 padding으로)
+      if (n.parentNode === groupId) {
+        return {
+          ...n,
+          position: {
+            x: n.position.x - minX + padding,
+            y: n.position.y - minY + padding,
+          }
+        }
+      }
+      return n
+    })
+  }, [])
+
+  // 선택된 노드들 세로 정렬
+  const alignVertical = useCallback(() => {
+    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    if (selectedNodes.length < 2) return
+
+    const gap = 20
+    const padding = 20
+    const sorted = [...selectedNodes].sort((a, b) => a.position.y - b.position.y)
+
+    // 그룹 내부 노드인지 확인
+    const parentId = selectedNodes[0].parentNode
+    const allSameParent = selectedNodes.every(n => n.parentNode === parentId)
+
+    setNodes((nds) => {
+      // 시작 위치 계산
+      const startX = padding
+      let currentY = padding
+
+      let updatedNodes = nds.map((n) => {
+        const idx = sorted.findIndex(s => s.id === n.id)
+        if (idx !== -1) {
+          const y = currentY
+          currentY += ((n.style?.height as number) || 150) + gap
+          return { ...n, position: { x: startX, y } }
+        }
+        return n
+      })
+
+      // 그룹 내부 노드면 그룹 크기 업데이트
+      if (allSameParent && parentId) {
+        updatedNodes = updateGroupSize(updatedNodes, parentId)
+      }
+
+      return updatedNodes
+    })
+  }, [nodes, setNodes, updateGroupSize])
+
+  // 선택된 노드들 가로 정렬
+  const alignHorizontal = useCallback(() => {
+    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    if (selectedNodes.length < 2) return
+
+    const gap = 20
+    const padding = 20
+    const sorted = [...selectedNodes].sort((a, b) => a.position.x - b.position.x)
+
+    // 그룹 내부 노드인지 확인
+    const parentId = selectedNodes[0].parentNode
+    const allSameParent = selectedNodes.every(n => n.parentNode === parentId)
+
+    setNodes((nds) => {
+      const startY = padding
+      let currentX = padding
+
+      let updatedNodes = nds.map((n) => {
+        const idx = sorted.findIndex(s => s.id === n.id)
+        if (idx !== -1) {
+          const x = currentX
+          currentX += ((n.style?.width as number) || 200) + gap
+          return { ...n, position: { x, y: startY } }
+        }
+        return n
+      })
+
+      // 그룹 내부 노드면 그룹 크기 업데이트
+      if (allSameParent && parentId) {
+        updatedNodes = updateGroupSize(updatedNodes, parentId)
+      }
+
+      return updatedNodes
+    })
+  }, [nodes, setNodes, updateGroupSize])
+
+  // 선택된 노드들 그리드 정렬 (최대 5열) - 노드 크기에 맞춰 딱 붙게 정렬
+  const alignGrid = useCallback(() => {
+    const selectedNodes = nodes.filter((n) => n.selected && n.type !== 'group')
+    if (selectedNodes.length < 2) return
+
+    const maxCols = 5
+    const gap = 15
+    const padding = 20
+
+    // 기존 위치 순서대로 정렬
+    const sorted = [...selectedNodes].sort((a, b) => {
+      const rowA = Math.floor(a.position.y / 100)
+      const rowB = Math.floor(b.position.y / 100)
+      if (rowA !== rowB) return rowA - rowB
+      return a.position.x - b.position.x
+    })
+
+    // 노드 타입별 기본 크기
+    const getNodeSize = (n: Node) => {
+      if (n.style?.width && n.style?.height) {
+        return { width: n.style.width as number, height: n.style.height as number }
+      }
+      switch (n.type) {
+        case 'image': return { width: 200, height: 200 }
+        case 'note': return { width: 180, height: 120 }
+        case 'text': return { width: 150, height: 40 }
+        case 'shape': return { width: 100, height: 100 }
+        default: return { width: 200, height: 150 }
+      }
+    }
+
+    // 각 노드의 크기 미리 계산
+    const sortedWithSize = sorted.map(n => ({ node: n, size: getNodeSize(n) }))
+
+    // 행 수 계산
+    const rowCount = Math.ceil(sorted.length / maxCols)
+
+    // 각 행의 최대 높이 계산
+    const rowHeights: number[] = []
+    for (let row = 0; row < rowCount; row++) {
+      const rowNodes = sortedWithSize.slice(row * maxCols, (row + 1) * maxCols)
+      const maxHeight = Math.max(...rowNodes.map(item => item.size.height))
+      rowHeights.push(maxHeight)
+    }
+
+    // 각 열의 최대 너비 계산
+    const colWidths: number[] = []
+    for (let col = 0; col < maxCols; col++) {
+      const colNodes = sortedWithSize.filter((_, idx) => idx % maxCols === col)
+      if (colNodes.length > 0) {
+        const maxWidth = Math.max(...colNodes.map(item => item.size.width))
+        colWidths.push(maxWidth)
+      }
+    }
+
+    // 그룹 내부 노드인지 확인
+    const parentId = selectedNodes[0].parentNode
+    const allSameParent = selectedNodes.every(n => n.parentNode === parentId)
+
+    setNodes((nds) => {
+      let updatedNodes = nds.map((n) => {
+        const idx = sorted.findIndex(s => s.id === n.id)
+        if (idx !== -1) {
+          const col = idx % maxCols
+          const row = Math.floor(idx / maxCols)
+
+          // x 위치: 이전 열들의 너비 합 + gap
+          let x = padding
+          for (let c = 0; c < col; c++) {
+            x += colWidths[c] + gap
+          }
+
+          // y 위치: 이전 행들의 높이 합 + gap
+          let y = padding
+          for (let r = 0; r < row; r++) {
+            y += rowHeights[r] + gap
+          }
+
+          return { ...n, position: { x, y } }
+        }
+        return n
+      })
+
+      // 그룹 내부 노드면 그룹 크기 업데이트
+      if (allSameParent && parentId) {
+        updatedNodes = updateGroupSize(updatedNodes, parentId)
+      }
+
+      return updatedNodes
+    })
+  }, [nodes, setNodes, updateGroupSize])
+
   // 키보드 단축키 핸들러
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -298,11 +671,21 @@ function WorkspaceCanvas() {
         e.preventDefault()
         setShowAddPanel((prev) => !prev)
       }
+      // Ctrl+G: 그룹화
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g' && !e.shiftKey) {
+        e.preventDefault()
+        groupSelectedNodes()
+      }
+      // Ctrl+Shift+G: 그룹 해제
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'G') {
+        e.preventDefault()
+        ungroupSelectedNodes()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes])
+  }, [undo, redo, copySelectedNodes, pasteNodes, setNodes, setEdges, nodes, groupSelectedNodes, ungroupSelectedNodes])
 
   // 노드/엣지 변경 시 히스토리 저장 (debounce)
   const lastSaveRef = useRef<string>('')
@@ -342,6 +725,7 @@ function WorkspaceCanvas() {
   // 드래그 앤 드롭
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
+    // 노드 드래그와 파일 드래그, 어셋 드래그 모두 허용
     event.dataTransfer.dropEffect = 'copy'
   }, [])
 
@@ -357,24 +741,34 @@ function WorkspaceCanvas() {
         y: event.clientY - bounds.top,
       })
 
-      // 로컬 파일 드롭 처리
+      // 로컬 파일 드롭 처리 (여러 이미지 지원, 최대 10개)
       const files = event.dataTransfer.files
       if (files && files.length > 0) {
-        const file = files[0]
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader()
-          reader.onload = (e) => {
-            const dataUrl = e.target?.result as string
-            const newNode: Node = {
-              id: getNewNodeId(),
-              type: 'image',
-              position,
-              data: { imageUrl: dataUrl, label: file.name.slice(0, 20) || '업로드 이미지' },
-              style: { width: 200, height: 200 },
+        const allImageFiles = Array.from(files).filter(f => f.type.startsWith('image/'))
+        const imageFiles = allImageFiles.slice(0, 10)
+        // 최대 개수 초과 시 안내
+        if (allImageFiles.length > 10) {
+          alert(`이미지는 한 번에 최대 10개까지만 추가할 수 있습니다.\n${allImageFiles.length}개 중 10개만 추가됩니다.`)
+        }
+        if (imageFiles.length > 0) {
+          imageFiles.forEach((file, index) => {
+            const reader = new FileReader()
+            reader.onload = (e) => {
+              const dataUrl = e.target?.result as string
+              const newNode: Node = {
+                id: getNewNodeId(),
+                type: 'image',
+                position: {
+                  x: position.x + (index % 5) * 220,
+                  y: position.y + Math.floor(index / 5) * 220,
+                },
+                data: { imageUrl: dataUrl, label: file.name.slice(0, 20) || '업로드 이미지' },
+                style: { width: 200, height: 200 },
+              }
+              setNodes((nds) => [...nds, newNode])
             }
-            setNodes((nds) => [...nds, newNode])
-          }
-          reader.readAsDataURL(file)
+            reader.readAsDataURL(file)
+          })
           return
         }
       }
@@ -564,24 +958,59 @@ function WorkspaceCanvas() {
     [reactFlowInstance]
   )
 
-  // 노드 우클릭 핸들러
-  const onNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: Node) => {
+  // 선택 영역 우클릭 핸들러 (여러 노드 선택 후 우클릭)
+  const onSelectionContextMenu = useCallback(
+    (event: React.MouseEvent) => {
       event.preventDefault()
       event.stopPropagation()
 
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
-        type: 'node',
-        nodeId: node.id,
-        nodeData: {
-          imageUrl: node.data?.imageUrl || node.data?.resultImage || node.data?.generatedImage,
-          prompt: node.data?.prompt || node.data?.label,
-        },
+        type: 'canvas', // 캔버스 타입으로 설정해서 그룹화 메뉴 표시
+        nodeData: { imageUrl: undefined, prompt: undefined },
       })
     },
     []
+  )
+
+  // 노드 우클릭 핸들러
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      // 그룹 노드 우클릭 시 자식 노드들도 선택
+      if (node.type === 'group') {
+        setNodes((nds) =>
+          nds.map((n) => {
+            if (n.id === node.id || n.parentNode === node.id) {
+              return { ...n, selected: true }
+            }
+            return n
+          })
+        )
+        // 그룹은 캔버스 타입 메뉴로 표시 (그룹화/정렬 메뉴)
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          type: 'canvas',
+          nodeData: { imageUrl: undefined, prompt: undefined },
+        })
+      } else {
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          type: 'node',
+          nodeId: node.id,
+          nodeData: {
+            imageUrl: node.data?.imageUrl || node.data?.resultImage || node.data?.generatedImage,
+            prompt: node.data?.prompt || node.data?.label,
+          },
+        })
+      }
+    },
+    [setNodes]
   )
 
   // 컨텍스트 메뉴 닫기
@@ -598,9 +1027,23 @@ function WorkspaceCanvas() {
     closeContextMenu()
   }, [contextMenu, setNodes, setEdges, closeContextMenu])
 
-  // 라이브러리에 추가 (컨텍스트 메뉴)
+  // 라이브러리에 추가 (컨텍스트 메뉴) - 다중 선택 지원
   const handleAddToLibrary = useCallback(() => {
-    if (contextMenu?.nodeData?.imageUrl) {
+    const selectedNodes = nodes.filter((n) => n.selected)
+    const imageNodes = selectedNodes.filter(n => n.data?.imageUrl)
+
+    if (imageNodes.length > 0) {
+      // 다중 선택된 이미지 노드들 추가
+      const newAssets = imageNodes.map((node, idx) => ({
+        id: `asset-${Date.now()}-${idx}`,
+        url: node.data.imageUrl as string,
+        prompt: (node.data.prompt as string) || '화이트보드에서 추가',
+        timestamp: Date.now() + idx,
+        category: selectedCategory === 'default' ? 'default' : selectedCategory
+      }))
+      setAssets(prev => [...newAssets, ...prev].slice(0, 50))
+    } else if (contextMenu?.nodeData?.imageUrl) {
+      // 단일 노드 (우클릭한 노드)
       setAssets(prev => [{
         id: `asset-${Date.now()}`,
         url: contextMenu.nodeData!.imageUrl!,
@@ -610,7 +1053,7 @@ function WorkspaceCanvas() {
       }, ...prev].slice(0, 50))
     }
     closeContextMenu()
-  }, [contextMenu, selectedCategory, closeContextMenu])
+  }, [contextMenu, selectedCategory, closeContextMenu, nodes])
 
   // 프롬프트 복사 (컨텍스트 메뉴)
   const handleCopyPrompt = useCallback(() => {
@@ -967,7 +1410,7 @@ function WorkspaceCanvas() {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onDragOver={onDragOver}
@@ -975,6 +1418,7 @@ function WorkspaceCanvas() {
           onNodeDoubleClick={onNodeDoubleClick}
           onPaneContextMenu={onPaneContextMenu}
           onNodeContextMenu={onNodeContextMenu}
+          onSelectionContextMenu={onSelectionContextMenu}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
@@ -1010,6 +1454,39 @@ function WorkspaceCanvas() {
           {contextMenu.type === 'canvas' ? (
             // 캔버스 우클릭 메뉴
             <>
+              {/* 선택된 노드가 있으면 그룹화/정렬 메뉴 먼저 표시 */}
+              {nodes.filter(n => n.selected).length >= 2 && (
+                <>
+                  <div className="context-menu-submenu-title">선택된 노드</div>
+                  <div
+                    className="context-menu-item"
+                    onClick={() => { groupSelectedNodes(); closeContextMenu(); }}
+                  >
+                    📦 그룹화
+                  </div>
+                  <div className="context-menu-submenu-title">정렬</div>
+                  <div
+                    className="context-menu-item"
+                    onClick={() => { alignVertical(); closeContextMenu(); }}
+                  >
+                    ⬇️ 세로 정렬
+                  </div>
+                  <div
+                    className="context-menu-item"
+                    onClick={() => { alignHorizontal(); closeContextMenu(); }}
+                  >
+                    ➡️ 가로 정렬
+                  </div>
+                  <div
+                    className="context-menu-item"
+                    onClick={() => { alignGrid(); closeContextMenu(); }}
+                  >
+                    ⊞ 그리드 정렬
+                  </div>
+                  <div className="context-menu-divider" />
+                </>
+              )}
+              <div className="context-menu-submenu-title">노드 추가</div>
               <div
                 className="context-menu-item"
                 onClick={() => handleContextMenuAddNode('aiGenerator')}
@@ -1045,13 +1522,14 @@ function WorkspaceCanvas() {
           ) : (
             // 노드 우클릭 메뉴
             <>
-              {contextMenu.nodeData?.imageUrl && (
+              {/* 다중 선택 시 이미지 노드가 있거나, 단일 노드가 이미지인 경우 */}
+              {(nodes.filter(n => n.selected && n.data?.imageUrl).length > 0 || contextMenu.nodeData?.imageUrl) && (
                 <>
                   <div
                     className="context-menu-item"
                     onClick={handleAddToLibrary}
                   >
-                    📚 라이브러리에 추가
+                    📚 라이브러리에 추가 {nodes.filter(n => n.selected && n.data?.imageUrl).length > 1 ? `(${nodes.filter(n => n.selected && n.data?.imageUrl).length}개)` : ''}
                   </div>
                 </>
               )}
@@ -1066,6 +1544,41 @@ function WorkspaceCanvas() {
               {(contextMenu.nodeData?.imageUrl || contextMenu.nodeData?.prompt) && (
                 <div className="context-menu-divider" />
               )}
+              {/* 그룹화 메뉴 */}
+              <div
+                className="context-menu-item"
+                onClick={() => { groupSelectedNodes(); closeContextMenu(); }}
+              >
+                📦 그룹화 (Ctrl+G)
+              </div>
+              <div
+                className="context-menu-item"
+                onClick={() => { ungroupSelectedNodes(); closeContextMenu(); }}
+              >
+                📤 그룹 해제
+              </div>
+              <div className="context-menu-divider" />
+              {/* 정렬 메뉴 */}
+              <div className="context-menu-submenu-title">정렬</div>
+              <div
+                className="context-menu-item"
+                onClick={() => { alignVertical(); closeContextMenu(); }}
+              >
+                ⬇️ 세로 정렬
+              </div>
+              <div
+                className="context-menu-item"
+                onClick={() => { alignHorizontal(); closeContextMenu(); }}
+              >
+                ➡️ 가로 정렬
+              </div>
+              <div
+                className="context-menu-item"
+                onClick={() => { alignGrid(); closeContextMenu(); }}
+              >
+                ⊞ 그리드 정렬
+              </div>
+              <div className="context-menu-divider" />
               <div
                 className="context-menu-item context-menu-delete"
                 onClick={handleContextMenuDelete}
@@ -1074,6 +1587,110 @@ function WorkspaceCanvas() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* 라이브러리 어셋 컨텍스트 메뉴 (카테고리별 프롬프트 복사) */}
+      {assetContextMenu && (
+        <div
+          className="context-menu"
+          style={{
+            position: 'fixed',
+            left: assetContextMenu.x,
+            top: assetContextMenu.y,
+            zIndex: 10000,
+            background: '#1a1a2e',
+            border: '1px solid #444',
+            borderRadius: 8,
+            padding: 4,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+            minWidth: 180,
+            maxHeight: 400,
+            overflowY: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: '6px 10px', fontSize: 11, color: '#888', borderBottom: '1px solid #333' }}>
+            📋 프롬프트 복사
+          </div>
+          {Object.entries(parsePromptByCategory(assetContextMenu.asset.prompt)).map(([category, content]) => {
+            if (!content) return null
+            return (
+              <div
+                key={category}
+                className="context-menu-item"
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  color: '#e0e0e0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+                onClick={() => {
+                  navigator.clipboard.writeText(content)
+                  setAssetContextMenu(null)
+                  console.log(`[${category}] 복사됨:`, content.slice(0, 50) + '...')
+                }}
+              >
+                <span style={{ color: category === '전체' ? '#4ade80' : '#94a3b8' }}>
+                  {category === '전체' ? '📄' :
+                   category === '캐릭터 상세' ? '👤' :
+                   category === '머리카락' ? '💇' :
+                   category === '의상' ? '👕' :
+                   category === '악세서리' ? '💍' :
+                   category === '무기' ? '⚔️' :
+                   category === '아트 스타일' ? '🎨' :
+                   category === '배경' ? '🖼️' : '📝'}
+                </span>
+                <span>{category}</span>
+              </div>
+            )
+          })}
+          <div style={{ borderTop: '1px solid #333', marginTop: 4, paddingTop: 4 }}>
+            <div
+              className="context-menu-item"
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontSize: 12,
+                color: '#e0e0e0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+              onClick={() => {
+                const link = document.createElement('a')
+                link.href = assetContextMenu.asset.url
+                link.download = `asset-${assetContextMenu.asset.timestamp}.png`
+                link.click()
+                setAssetContextMenu(null)
+              }}
+            >
+              <span>⬇️</span>
+              <span>이미지 다운로드</span>
+            </div>
+            <div
+              className="context-menu-item context-menu-delete"
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontSize: 12,
+                color: '#ef4444',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+              onClick={() => {
+                setAssets(prev => prev.filter(a => a.id !== assetContextMenu.asset.id))
+                setAssetContextMenu(null)
+              }}
+            >
+              <span>🗑️</span>
+              <span>삭제</span>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1189,20 +1806,29 @@ function WorkspaceCanvas() {
               onDrop={(e) => {
                 e.preventDefault()
                 e.currentTarget.classList.remove('dragging')
-                const file = e.dataTransfer.files[0]
-                if (file && file.type.startsWith('image/')) {
-                  const reader = new FileReader()
-                  reader.onload = (event) => {
-                    const url = event.target?.result as string
-                    setAssets(prev => [{
-                      id: `asset-${Date.now()}`,
-                      url,
-                      prompt: '업로드된 이미지',
-                      timestamp: Date.now(),
-                      category: selectedCategory === 'default' ? 'default' : selectedCategory
-                    }, ...prev].slice(0, 50))
+                const files = e.dataTransfer.files
+                if (files && files.length > 0) {
+                  // 여러 이미지 한번에 처리 (최대 10개)
+                  const allImageFiles = Array.from(files).filter(f => f.type.startsWith('image/'))
+                  const imageFiles = allImageFiles.slice(0, 10)
+                  // 최대 개수 초과 시 안내
+                  if (allImageFiles.length > 10) {
+                    alert(`이미지는 한 번에 최대 10개까지만 추가할 수 있습니다.\n${allImageFiles.length}개 중 10개만 추가됩니다.`)
                   }
-                  reader.readAsDataURL(file)
+                  imageFiles.forEach((file, idx) => {
+                    const reader = new FileReader()
+                    reader.onload = (event) => {
+                      const url = event.target?.result as string
+                      setAssets(prev => [{
+                        id: `asset-${Date.now()}-${idx}`,
+                        url,
+                        prompt: '업로드된 이미지',
+                        timestamp: Date.now(),
+                        category: selectedCategory === 'default' ? 'default' : selectedCategory
+                      }, ...prev].slice(0, 50))
+                    }
+                    reader.readAsDataURL(file)
+                  })
                 }
               }}
               onClick={() => {
@@ -1255,7 +1881,7 @@ function WorkspaceCanvas() {
                     <div
                       key={asset.id}
                       className="asset-sidebar-item"
-                      title={`${asset.prompt}\n드래그하여 캔버스에 추가`}
+                      title="우클릭: 프롬프트 복사 메뉴"
                       draggable
                       onDragStart={(e) => {
                         const data = JSON.stringify({
@@ -1271,6 +1897,15 @@ function WorkspaceCanvas() {
                         if (img) {
                           e.dataTransfer.setDragImage(img, 50, 50)
                         }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setAssetContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          asset
+                        })
                       }}
                     >
                       <img src={asset.url} alt="asset" draggable={false} />
