@@ -740,7 +740,7 @@ function WorkspaceCanvas() {
             type: 'edit',
             position,
             data: {},
-            style: { width: 440, height: 700 },
+            style: { width: 750, height: 620 },
           }
           break
         case 'linkCard':
@@ -967,7 +967,7 @@ function WorkspaceCanvas() {
           type: 'edit',
           position,
           data: {},
-          style: { width: 440, height: 700 },
+          style: { width: 750, height: 620 },
         }
         break
       default:

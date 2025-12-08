@@ -210,6 +210,32 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
     return Object.values(selectedOptions).reduce((sum, opts) => sum + opts.length, 0)
   }, [selectedOptions])
 
+  // 선택된 옵션들의 프롬프트 미리보기 생성
+  const previewPrompt = useMemo(() => {
+    const promptParts: string[] = []
+
+    // 각 카테고리별 선택된 옵션 표시
+    Object.entries(selectedOptions).forEach(([category, optIds]) => {
+      if (optIds.length === 0) return
+      const categoryOpts = CATEGORY_OPTIONS[category] || []
+      const categoryInfo = EDIT_CATEGORIES.find(c => c.id === category)
+
+      optIds.forEach(optId => {
+        const opt = categoryOpts.find(o => o.id === optId)
+        if (opt && opt.prompt) {
+          promptParts.push(`${categoryInfo?.icon || ''} ${opt.label}: ${opt.prompt}`)
+        }
+      })
+    })
+
+    // 커스텀 프롬프트 추가
+    if (customPrompt.trim()) {
+      promptParts.push(`✏️ 커스텀: ${customPrompt.trim()}`)
+    }
+
+    return promptParts
+  }, [selectedOptions, customPrompt])
+
   // API 키 저장
   useEffect(() => {
     setNodes((nds) =>
@@ -596,6 +622,39 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
             }}
           />
         </div>
+
+        {/* 선택된 프롬프트 미리보기 */}
+        {previewPrompt.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, color: '#10b981', marginBottom: 6, fontWeight: 'bold' }}>
+              📋 적용될 프롬프트 ({previewPrompt.length}개)
+            </div>
+            <div
+              style={{
+                background: '#1a1a2e',
+                borderRadius: 6,
+                padding: 10,
+                border: '1px solid #333',
+                maxHeight: 150,
+                overflowY: 'auto',
+              }}
+            >
+              {previewPrompt.map((prompt, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    fontSize: 10,
+                    color: '#ccc',
+                    padding: '4px 0',
+                    borderBottom: idx < previewPrompt.length - 1 ? '1px solid #333' : 'none',
+                  }}
+                >
+                  {prompt}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
