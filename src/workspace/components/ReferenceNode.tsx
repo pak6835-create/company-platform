@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { ReferenceNodeData, ReferenceType } from '../types'
 import { REFERENCE_NODE_CONFIG } from '../config/node-configs'
@@ -15,6 +15,34 @@ export function ReferenceNode({ data, selected, id }: NodeProps<ReferenceNodeDat
   const defaultConfig = { title: '이미지 참조', color: '#4CAF50', options: [] }
   const config = REFERENCE_NODE_CONFIG[referenceType] || REFERENCE_NODE_CONFIG.pose || defaultConfig
   const themeColor = config?.color || '#4CAF50'
+
+  // 컨텐츠에 따른 노드 높이 계산
+  const calculatedHeight = useMemo(() => {
+    let height = 200 // 기본 높이 (헤더, 타입 선택)
+    height += 150 // 이미지 드롭존
+    if (image) height += 60 // 참조 강도 슬라이더
+    const optionsCount = config?.options?.length || 0
+    if (optionsCount > 0) {
+      const rows = Math.ceil(optionsCount / 2) // 2열 기준
+      height += rows * 36 + 20 // 옵션 버튼들
+    }
+    return Math.max(300, Math.min(height, 600))
+  }, [image, config?.options?.length])
+
+  // 노드 크기 자동 조절
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentHeight = (n.style?.height as number) || 300
+          if (Math.abs(currentHeight - calculatedHeight) > 30) {
+            return { ...n, style: { ...n.style, height: calculatedHeight } }
+          }
+        }
+        return n
+      })
+    )
+  }, [calculatedHeight, id, setNodes])
 
   useEffect(() => {
     setNodes((nds) =>

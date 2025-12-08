@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { NodeProps, Handle, Position, useReactFlow, NodeResizer } from 'reactflow'
 
 // 체크리스트 아이템 타입
@@ -19,6 +19,34 @@ export function ChecklistNode({ id, data, selected }: NodeProps<ChecklistNodeDat
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleInput, setTitleInput] = useState(data.title || '체크리스트')
   const [newItemText, setNewItemText] = useState('')
+
+  // 컨텐츠에 따른 노드 높이 계산
+  const calculatedHeight = useMemo(() => {
+    const headerHeight = 50 // 헤더
+    const progressBarHeight = (data.items?.length || 0) > 0 ? 8 : 0 // 진행률 바
+    const itemHeight = 32 // 각 아이템 높이
+    const itemsCount = data.items?.length || 0
+    const addInputHeight = 44 // 추가 입력란
+    const padding = 16 // 상하 패딩
+
+    const height = headerHeight + progressBarHeight + (itemsCount * itemHeight) + addInputHeight + padding
+    return Math.max(150, Math.min(height, 500))
+  }, [data.items?.length])
+
+  // 노드 높이 자동 조절
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentHeight = (n.style?.height as number) || 150
+          if (Math.abs(currentHeight - calculatedHeight) > 20) {
+            return { ...n, style: { ...n.style, height: calculatedHeight } }
+          }
+        }
+        return n
+      })
+    )
+  }, [calculatedHeight, id, setNodes])
 
   // 노드 데이터 업데이트 헬퍼
   const updateNodeData = useCallback((updates: Partial<ChecklistNodeData>) => {

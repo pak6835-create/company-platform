@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { NoteNodeData } from '../types'
 
@@ -12,6 +12,32 @@ export function NoteNode({ id, data, selected }: NodeProps<NoteNodeData>) {
   useEffect(() => {
     setContent(data.content || '')
   }, [data.content])
+
+  // 컨텐츠에 따른 노드 높이 계산
+  const calculatedHeight = useMemo(() => {
+    if (!content) return 100 // 빈 노트 최소 높이
+    const lineCount = content.split('\n').length
+    const charPerLine = 25 // 대략적인 한 줄 글자 수
+    const estimatedLines = Math.max(lineCount, Math.ceil(content.length / charPerLine))
+    const height = 60 + estimatedLines * 20 // 기본 패딩 + 줄당 높이
+    return Math.max(100, Math.min(height, 500))
+  }, [content])
+
+  // 노드 크기 자동 조절 (편집 모드가 아닐 때만)
+  useEffect(() => {
+    if (isEditing) return // 편집 중에는 자동 조절 안함
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentHeight = (n.style?.height as number) || 100
+          if (Math.abs(currentHeight - calculatedHeight) > 20) {
+            return { ...n, style: { ...n.style, height: calculatedHeight } }
+          }
+        }
+        return n
+      })
+    )
+  }, [calculatedHeight, id, setNodes, isEditing])
 
   // 편집 모드 시작시 포커스
   useEffect(() => {

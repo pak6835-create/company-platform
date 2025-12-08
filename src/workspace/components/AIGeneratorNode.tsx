@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { AIGeneratorNodeData } from '../types'
@@ -215,6 +215,39 @@ export function AIGeneratorNode({ data, selected, id }: NodeProps<AIGeneratorNod
       })
     )
   }, [apiKey, model, id, setNodes])
+
+  // 컨텐츠에 따른 노드 높이 계산
+  const calculatedHeight = useMemo(() => {
+    // 기본 높이 (헤더, 카테고리, 버튼 등)
+    let height = 650
+    // 직접 프롬프트 입력 모드일 때 추가 높이
+    if (useCustomPrompt) height += 80
+    // 생성된 이미지가 있을 때 갤러리 높이 증가
+    if (generatedImages.length > 0) {
+      const rows = Math.ceil(generatedImages.length / 2) // 2열 기준
+      height += Math.min(rows * 80, 300) // 최대 300px 추가
+    }
+    // 에러 메시지가 있을 때
+    if (error) height += 40
+    // 생성 상태가 있을 때
+    if (generationStatus) height += 40
+    return Math.max(600, Math.min(height, 1000))
+  }, [useCustomPrompt, generatedImages.length, error, generationStatus])
+
+  // 노드 크기 자동 조절
+  useLayoutEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentHeight = (n.style?.height as number) || 600
+          if (Math.abs(currentHeight - calculatedHeight) > 50) {
+            return { ...n, style: { ...n.style, height: calculatedHeight } }
+          }
+        }
+        return n
+      })
+    )
+  }, [calculatedHeight, id, setNodes])
 
   // ==================== 프롬프트 자동 생성 ====================
 

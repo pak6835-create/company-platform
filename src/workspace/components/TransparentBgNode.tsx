@@ -48,6 +48,30 @@ export function TransparentBgNode({ data, selected, id }: NodeProps<TransparentB
   // 실제 사용할 이미지 (업로드 우선, 없으면 노드 연결)
   const sourceImage = uploadedImage || connectedImage
 
+  // 컨텐츠에 따른 노드 높이 계산
+  const calculatedHeight = useMemo(() => {
+    let height = 350 // 기본 높이 (헤더, API키, 옵션, 버튼)
+    if (sourceImage) height += 120 // 원본 이미지
+    if (transparentImage) height += 250 // 결과 이미지
+    if (isProcessing) height += 50 // 프로그레스바
+    return Math.max(400, Math.min(height, 900))
+  }, [sourceImage, transparentImage, isProcessing])
+
+  // 노드 크기 자동 조절
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentHeight = (n.style?.height as number) || 400
+          if (Math.abs(currentHeight - calculatedHeight) > 30) {
+            return { ...n, style: { ...n.style, height: calculatedHeight } }
+          }
+        }
+        return n
+      })
+    )
+  }, [calculatedHeight, id, setNodes])
+
   // API 키 저장
   useEffect(() => {
     setNodes((nds) =>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { NodeProps, NodeResizer, Handle, Position, useReactFlow } from 'reactflow'
 import { TextNodeData } from '../types'
 
@@ -12,6 +12,33 @@ export function TextNode({ id, data, selected }: NodeProps<TextNodeData>) {
   useEffect(() => {
     setText(data.text || '')
   }, [data.text])
+
+  // 컨텐츠에 따른 노드 너비 계산
+  const calculatedWidth = useMemo(() => {
+    const fontSize = data.fontSize || 16
+    const charWidth = fontSize * 0.6 // 대략적인 글자 너비
+    const padding = 24 // 양쪽 패딩
+    const minWidth = 100
+    const maxWidth = 400
+    const width = Math.max(minWidth, Math.min(text.length * charWidth + padding, maxWidth))
+    return width
+  }, [text, data.fontSize])
+
+  // 노드 너비 자동 조절 (편집 모드가 아닐 때만)
+  useEffect(() => {
+    if (isEditing) return
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentWidth = (n.style?.width as number) || 100
+          if (Math.abs(currentWidth - calculatedWidth) > 20) {
+            return { ...n, style: { ...n.style, width: calculatedWidth } }
+          }
+        }
+        return n
+      })
+    )
+  }, [calculatedWidth, id, setNodes, isEditing])
 
   // 편집 모드 시작시 포커스
   useEffect(() => {
