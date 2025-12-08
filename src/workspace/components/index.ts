@@ -11,7 +11,7 @@ export { ChecklistNode } from './ChecklistNode'
 export { AIGeneratorNode } from './AIGeneratorNode'
 export { ReferenceNode } from './ReferenceNode'
 export { TransparentBgNode } from './TransparentBgNode'
-export { PoseChangeNode } from './PoseChangeNode'
+export { EditNode } from './EditNode'
 
 // 노드 타입 맵
 import { ImageNode } from './ImageNode'
@@ -24,7 +24,7 @@ import { ChecklistNode } from './ChecklistNode'
 import { AIGeneratorNode } from './AIGeneratorNode'
 import { ReferenceNode } from './ReferenceNode'
 import { TransparentBgNode } from './TransparentBgNode'
-import { PoseChangeNode } from './PoseChangeNode'
+import { EditNode } from './EditNode'
 
 export const nodeTypes = {
   image: ImageNode,
@@ -37,5 +37,5 @@ export const nodeTypes = {
   aiGenerator: AIGeneratorNode,
   reference: ReferenceNode,
   transparentBg: TransparentBgNode,
-  poseChange: PoseChangeNode,
+  edit: EditNode,
 }

@@ -734,13 +734,13 @@ function WorkspaceCanvas() {
             style: { width: 400, height: 580 },
           }
           break
-        case 'poseChange':
+        case 'edit':
           newNode = {
             id: getNewNodeId(),
-            type: 'poseChange',
+            type: 'edit',
             position,
             data: {},
-            style: { width: 440, height: 650 },
+            style: { width: 440, height: 700 },
           }
           break
         case 'linkCard':
@@ -961,13 +961,13 @@ function WorkspaceCanvas() {
           style: { width: 400, height: 580 },
         }
         break
-      case 'poseChange':
+      case 'edit':
         newNode = {
           id: getNewNodeId(),
-          type: 'poseChange',
+          type: 'edit',
           position,
           data: {},
-          style: { width: 440, height: 650 },
+          style: { width: 440, height: 700 },
         }
         break
       default:
@@ -1127,15 +1127,15 @@ function WorkspaceCanvas() {
                   <span>투명 배경 생성기</span>
                 </div>
                 <div
-                  className="draggable-item pose-change-drag"
+                  className="draggable-item edit-drag"
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'poseChange')
+                    e.dataTransfer.setData('application/reactflow-type', 'edit')
                     e.dataTransfer.effectAllowed = 'move'
                   }}
                 >
-                  <span className="drag-icon">🕺</span>
-                  <span>포즈 변경</span>
+                  <span className="drag-icon">✏️</span>
+                  <span>편집</span>
                 </div>
               </div>
             </div>
@@ -1380,9 +1380,9 @@ function WorkspaceCanvas() {
               </div>
               <div
                 className="context-menu-item"
-                onClick={() => handleContextMenuAddNode('poseChange')}
+                onClick={() => handleContextMenuAddNode('edit')}
               >
-                🕺 포즈 변경
+                ✏️ 편집
               </div>
               <div className="context-menu-divider" />
               <div
