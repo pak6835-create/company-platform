@@ -100,6 +100,35 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
   // 실제 사용할 이미지
   const sourceImage = uploadedImage || connectedImage
 
+  // 편집 항목 개수에 따른 노드 높이 계산
+  const BASE_HEIGHT = 500 // 기본 높이 (API키, 원본이미지, 옵션, 버튼 등)
+  const ITEM_HEIGHT = 220 // 각 편집 항목당 높이 (프리셋 있는 경우)
+  const RESULT_HEIGHT = 250 // 결과 이미지 영역
+
+  // 편집 항목 개수에 따라 노드 크기 자동 조절
+  useEffect(() => {
+    const itemCount = editItems.length
+    const hasResult = resultImage !== null
+    const calculatedHeight = BASE_HEIGHT + (itemCount * ITEM_HEIGHT) + (hasResult ? RESULT_HEIGHT : 0)
+    const newHeight = Math.max(500, Math.min(calculatedHeight, 1500)) // 최소 500, 최대 1500
+
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === id) {
+          const currentHeight = (n.style?.height as number) || 500
+          // 높이가 다를 때만 업데이트 (불필요한 리렌더링 방지)
+          if (Math.abs(currentHeight - newHeight) > 50) {
+            return {
+              ...n,
+              style: { ...n.style, height: newHeight }
+            }
+          }
+        }
+        return n
+      })
+    )
+  }, [editItems.length, resultImage, id, setNodes])
+
   // API 키 저장
   useEffect(() => {
     setNodes((nds) =>
@@ -589,6 +618,14 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
     )
   }
 
+  // 현재 노드 높이 계산
+  const currentNodeHeight = useMemo(() => {
+    const itemCount = editItems.length
+    const hasResult = resultImage !== null
+    const calculatedHeight = BASE_HEIGHT + (itemCount * ITEM_HEIGHT) + (hasResult ? RESULT_HEIGHT : 0)
+    return Math.max(500, Math.min(calculatedHeight, 1500))
+  }, [editItems.length, resultImage])
+
   return (
     <div
       className={`edit-node ${selected ? 'selected' : ''}`}
@@ -598,13 +635,13 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
         border: selected ? '2px solid #f59e0b' : '2px solid #333',
         width: '100%',
         height: '100%',
-        minHeight: 700,
+        minHeight: currentNodeHeight,
         color: 'white',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      <NodeResizer isVisible={selected} minWidth={450} minHeight={700} />
+      <NodeResizer isVisible={selected} minWidth={450} minHeight={Math.max(500, currentNodeHeight - 100)} />
 
       {/* 헤더 */}
       <div
