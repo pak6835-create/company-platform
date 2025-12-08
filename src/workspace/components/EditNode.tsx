@@ -189,6 +189,9 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
   // 각 카테고리별 선택된 옵션들
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
 
+  // 각 카테고리별 참조 이미지 (최대 14개 지원, 카테고리당 최대 2개)
+  const [categoryRefImages, setCategoryRefImages] = useState<Record<string, string[]>>({})
+
   // 커스텀 프롬프트
   const [customPrompt, setCustomPrompt] = useState('')
 
@@ -210,6 +213,36 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
     return Object.values(selectedOptions).reduce((sum, opts) => sum + opts.length, 0)
   }, [selectedOptions])
 
+  // 전체 참조 이미지 수 계산 (최대 14개)
+  const totalRefImageCount = useMemo(() => {
+    return Object.values(categoryRefImages).reduce((sum, imgs) => sum + imgs.length, 0)
+  }, [categoryRefImages])
+
+  // 참조 이미지 추가 핸들러
+  const addCategoryRefImage = (category: string, imageUrl: string) => {
+    setCategoryRefImages(prev => {
+      const currentImages = prev[category] || []
+      // 카테고리당 최대 2개
+      if (currentImages.length >= 2) {
+        return prev
+      }
+      // 전체 최대 14개
+      const totalCount = Object.values(prev).reduce((sum, imgs) => sum + imgs.length, 0)
+      if (totalCount >= 14) {
+        return prev
+      }
+      return { ...prev, [category]: [...currentImages, imageUrl] }
+    })
+  }
+
+  // 참조 이미지 삭제 핸들러
+  const removeCategoryRefImage = (category: string, index: number) => {
+    setCategoryRefImages(prev => {
+      const currentImages = prev[category] || []
+      return { ...prev, [category]: currentImages.filter((_, i) => i !== index) }
+    })
+  }
+
   // 선택된 옵션들의 프롬프트 미리보기 생성
   const previewPrompt = useMemo(() => {
     const promptParts: string[] = []
@@ -219,13 +252,25 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
       if (optIds.length === 0) return
       const categoryOpts = CATEGORY_OPTIONS[category] || []
       const categoryInfo = EDIT_CATEGORIES.find(c => c.id === category)
+      const refImgCount = categoryRefImages[category]?.length || 0
 
       optIds.forEach(optId => {
         const opt = categoryOpts.find(o => o.id === optId)
         if (opt && opt.prompt) {
-          promptParts.push(`${categoryInfo?.icon || ''} ${opt.label}: ${opt.prompt}`)
+          const refText = refImgCount > 0 ? ` [참조 ${refImgCount}장]` : ''
+          promptParts.push(`${categoryInfo?.icon || ''} ${opt.label}: ${opt.prompt}${refText}`)
         }
       })
+    })
+
+    // 참조 이미지만 있는 카테고리 표시
+    Object.entries(categoryRefImages).forEach(([category, imgs]) => {
+      if (imgs.length === 0) return
+      const hasOptions = (selectedOptions[category]?.length || 0) > 0
+      if (!hasOptions) {
+        const categoryInfo = EDIT_CATEGORIES.find(c => c.id === category)
+        promptParts.push(`${categoryInfo?.icon || ''} ${categoryInfo?.name || category}: [참조 이미지 ${imgs.length}장]`)
+      }
     })
 
     // 커스텀 프롬프트 추가
@@ -234,7 +279,7 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
     }
 
     return promptParts
-  }, [selectedOptions, customPrompt])
+  }, [selectedOptions, customPrompt, categoryRefImages])
 
   // API 키 저장
   useEffect(() => {
@@ -359,6 +404,21 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
     return `Keep the original character's identity. Apply these changes: ${promptParts.join(', ')}. ${bgInstruction}`
   }
 
+  // 모든 카테고리의 참조 이미지 수집 (base64 배열로 변환)
+  const collectAllRefImages = (): string[] => {
+    const allRefImages: string[] = []
+    Object.values(categoryRefImages).forEach(imgs => {
+      imgs.forEach(img => {
+        // data:image/png;base64, 부분 제거
+        const base64 = img.includes(',') ? img.split(',')[1] : img
+        if (base64) {
+          allRefImages.push(base64)
+        }
+      })
+    })
+    return allRefImages.slice(0, 14) // 최대 14개
+  }
+
   // 편집 실행
   const handleProcess = async () => {
     if (!apiKey) {
@@ -369,7 +429,7 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
       setStatusText('⚠️ 원본 이미지를 업로드하세요')
       return
     }
-    if (totalSelectedCount === 0 && !customPrompt.trim()) {
+    if (totalSelectedCount === 0 && !customPrompt.trim() && totalRefImageCount === 0) {
       setStatusText('⚠️ 편집 옵션을 선택하거나 커스텀 프롬프트를 입력하세요')
       return
     }
@@ -384,8 +444,12 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
       const model = MODELS[0].id
       const prompt = buildFullPrompt()
 
+      // 참조 이미지 수집
+      const refImages = collectAllRefImages()
+      const hasRefImages = refImages.length > 0
+
       setProgress(10)
-      setStatusText('🔄 이미지 분석 중...')
+      setStatusText(hasRefImages ? `🔄 이미지 분석 중... (참조 ${refImages.length}장)` : '🔄 이미지 분석 중...')
 
       const result = await editImage(
         apiKey,
@@ -393,7 +457,7 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
         prompt,
         model,
         'image/png',
-        undefined,
+        hasRefImages ? refImages : undefined,
         { imageSize: resolution }
       )
 
@@ -572,6 +636,8 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
     // 일반 카테고리 옵션들
     const options = CATEGORY_OPTIONS[cat] || []
     const selected = selectedOptions[cat] || []
+    const catRefImages = categoryRefImages[cat] || []
+    const canAddMoreRefImages = catRefImages.length < 2 && totalRefImageCount < 14
 
     return (
       <div className="edit-options-panel" style={{ padding: 8 }}>
@@ -598,6 +664,116 @@ export function EditNode({ data, selected, id }: NodeProps<EditNodeData>) {
               {opt.label}
             </button>
           ))}
+        </div>
+
+        {/* 참조 이미지 (카테고리별) */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>📷 참조 이미지 (선택)</span>
+            <span style={{ fontSize: 10, color: '#666' }}>
+              {catRefImages.length}/2개 | 전체 {totalRefImageCount}/14개
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* 기존 참조 이미지들 */}
+            {catRefImages.map((img, idx) => (
+              <div
+                key={idx}
+                style={{
+                  width: 70,
+                  height: 70,
+                  borderRadius: 6,
+                  border: '1px solid #555',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                <img
+                  src={img}
+                  alt={`ref-${idx}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <button
+                  onClick={() => removeCategoryRefImage(cat, idx)}
+                  style={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: 'rgba(0,0,0,0.7)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            {/* 이미지 추가 버튼 */}
+            {canAddMoreRefImages && (
+              <div
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = 'image/*'
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) {
+                      const reader = new FileReader()
+                      reader.onload = (ev) => {
+                        addCategoryRefImage(cat, ev.target?.result as string)
+                      }
+                      reader.readAsDataURL(file)
+                    }
+                  }
+                  input.click()
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const file = e.dataTransfer.files[0]
+                  if (file && file.type.startsWith('image/')) {
+                    const reader = new FileReader()
+                    reader.onload = (ev) => {
+                      addCategoryRefImage(cat, ev.target?.result as string)
+                    }
+                    reader.readAsDataURL(file)
+                  }
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
+                style={{
+                  width: 70,
+                  height: 70,
+                  borderRadius: 6,
+                  border: '2px dashed #555',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#666',
+                  fontSize: 10,
+                  gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 20 }}>+</span>
+                <span>추가</span>
+              </div>
+            )}
+          </div>
+
+          <p style={{ fontSize: 9, color: '#666', margin: '6px 0 0 0' }}>
+            이 카테고리의 스타일/특성을 참조할 이미지
+          </p>
         </div>
 
         {/* 커스텀 프롬프트 */}

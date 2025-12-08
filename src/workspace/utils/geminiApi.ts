@@ -107,7 +107,7 @@ export async function generateImage(
  * @param editPrompt - 편집 프롬프트
  * @param model - 모델 ID
  * @param mimeType - 이미지 MIME 타입
- * @param referenceBase64 - 참조 이미지의 base64 데이터 (선택, 포즈 변경 등에 사용)
+ * @param referenceBase64 - 참조 이미지의 base64 데이터 (선택, 단일 또는 배열, 최대 14개)
  * @param options - 이미지 옵션 (해상도, 종횡비)
  */
 export async function editImage(
@@ -116,7 +116,7 @@ export async function editImage(
   editPrompt: string,
   model: string = MODELS[0].id,
   mimeType: string = 'image/png',
-  referenceBase64?: string,
+  referenceBase64?: string | string[],
   options?: ImageOptions
 ): Promise<{ base64: string; url: string }> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -127,9 +127,16 @@ export async function editImage(
     { inlineData: { mimeType, data: imageBase64 } },
   ]
 
-  // 참조 이미지가 있으면 추가
+  // 참조 이미지가 있으면 추가 (단일 또는 배열, 최대 14개)
   if (referenceBase64) {
-    parts.push({ inlineData: { mimeType, data: referenceBase64 } })
+    const refImages = Array.isArray(referenceBase64) ? referenceBase64 : [referenceBase64]
+    // 최대 14개까지만 (나노바나나 3 Pro 제한)
+    const limitedRefs = refImages.slice(0, 14)
+    for (const refBase64 of limitedRefs) {
+      if (refBase64) {
+        parts.push({ inlineData: { mimeType, data: refBase64 } })
+      }
+    }
   }
 
   // generationConfig 구성
