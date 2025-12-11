@@ -1504,25 +1504,43 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
                         : `원하는 변경사항 입력...\n예: 머리색을 파란색으로`}
                     />
                     <div className="preview-edit-presets">
-                      {editRefImages.length > 0 ? (
-                        <>
-                          <span onClick={() => setEditPromptText('Add the object from the reference image to this character, blend naturally')}>🔗합성</span>
-                          <span onClick={() => setEditPromptText('Apply the style from the reference image to this image')}>🎨스타일</span>
-                          <span onClick={() => setEditPromptText('Replace the outfit with the one from the reference image')}>👔의상</span>
-                          <span onClick={() => setEditPromptText('Add the accessory from the reference image')}>💍소품</span>
-                          <span onClick={() => setEditPromptText('Use the pose from the reference image')}>🕺포즈</span>
-                          <span onClick={() => setEditPromptText('Blend both images into one scene')}>🖼️장면</span>
-                        </>
-                      ) : (
-                        <>
-                          <span onClick={() => setEditPromptText('change hair color to blue')}>💙머리색</span>
-                          <span onClick={() => setEditPromptText('add soft lighting')}>💡조명</span>
-                          <span onClick={() => setEditPromptText('change to night scene')}>🌙야경</span>
-                          <span onClick={() => setEditPromptText('make it anime style')}>🎨애니화</span>
-                          <span onClick={() => setEditPromptText('enhance details and quality')}>✨선명</span>
-                          <span onClick={() => setEditPromptText('change background to white')}>⬜배경</span>
-                        </>
-                      )}
+                      {/* 기본 빠른 편집 */}
+                      <div className="preset-row">
+                        <span className="preset-label">빠른편집</span>
+                        {editRefImages.length > 0 ? (
+                          <>
+                            <span onClick={() => setEditPromptText('Add the object from the reference image to this character, blend naturally')}>🔗합성</span>
+                            <span onClick={() => setEditPromptText('Apply the style from the reference image')}>🎨스타일</span>
+                            <span onClick={() => setEditPromptText('Replace the outfit with the reference')}>👔의상</span>
+                            <span onClick={() => setEditPromptText('Add the accessory from reference')}>💍소품</span>
+                          </>
+                        ) : (
+                          <>
+                            <span onClick={() => setEditPromptText('change hair color to blue')}>💙머리</span>
+                            <span onClick={() => setEditPromptText('add soft warm lighting')}>💡조명</span>
+                            <span onClick={() => setEditPromptText('make it anime style')}>🎨애니화</span>
+                            <span onClick={() => setEditPromptText('enhance details and quality')}>✨선명</span>
+                          </>
+                        )}
+                      </div>
+                      {/* 캐릭터 편집 */}
+                      <div className="preset-row">
+                        <span className="preset-label">캐릭터</span>
+                        <span onClick={() => setEditPromptText('change expression to smile, happy face')}>😊표정</span>
+                        <span onClick={() => setEditPromptText('change outfit to casual modern clothes')}>👕의상</span>
+                        <span onClick={() => setEditPromptText('add angel wings, white feathered wings spread')}>🪽날개</span>
+                        <span onClick={() => setEditPromptText('add cat ears and tail, fluffy')}>🐱수인</span>
+                        <span onClick={() => setEditPromptText('change eye color to purple, glowing eyes')}>👁️눈색</span>
+                      </div>
+                      {/* 배경/분위기 편집 */}
+                      <div className="preset-row">
+                        <span className="preset-label">배경</span>
+                        <span onClick={() => setEditPromptText('change to night scene, dark sky, city lights')}>🌙야경</span>
+                        <span onClick={() => setEditPromptText('add sunset golden hour lighting, warm tones')}>🌅석양</span>
+                        <span onClick={() => setEditPromptText('change to rainy atmosphere, rain drops')}>🌧️비</span>
+                        <span onClick={() => setEditPromptText('add snow, winter atmosphere, cold tones')}>❄️눈</span>
+                        <span onClick={() => setEditPromptText('change background to pure white')}>⬜흰배경</span>
+                      </div>
                     </div>
                     <button
                       className="preview-edit-btn primary"
