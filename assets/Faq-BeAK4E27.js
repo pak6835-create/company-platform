@@ -1,4 +1,4 @@
-import{j as e}from"./index-4umeWZWE.js";import{a as n,L as c}from"./vendor-react-BLQjSpGA.js";const x=[{id:"all",name:"전체"},{id:"service",name:"서비스 안내"},{id:"order",name:"의뢰/주문"},{id:"price",name:"가격/결제"},{id:"delivery",name:"납품/수정"},{id:"etc",name:"기타"}],q=[{id:1,category:"service",question:"수요일오전은 어떤 서비스를 제공하나요?",answer:`수요일오전은 웹툰 배경 전문 제작 스튜디오입니다. 주요 서비스는 다음과 같습니다:
+import{j as e}from"./index-Ggd34I_z.js";import{a as n,L as c}from"./vendor-react-BLQjSpGA.js";const x=[{id:"all",name:"전체"},{id:"service",name:"서비스 안내"},{id:"order",name:"의뢰/주문"},{id:"price",name:"가격/결제"},{id:"delivery",name:"납품/수정"},{id:"etc",name:"기타"}],q=[{id:1,category:"service",question:"수요일오전은 어떤 서비스를 제공하나요?",answer:`수요일오전은 웹툰 배경 전문 제작 스튜디오입니다. 주요 서비스는 다음과 같습니다:
     <ul>
       <li>웹툰용 배경 일러스트 제작</li>
       <li>3D 모델링 기반 배경 제작</li>
