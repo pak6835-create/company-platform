@@ -455,7 +455,7 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
     if (page === 'char') {
       base = `A single character, full body, pure white background, ${base}. Only ONE character.`
     } else if (page === 'asset') {
-      base = `A single item, product shot, centered, ${base}. Only ONE object, no person, no character.`
+      base = `A single item, product shot, centered, pure white background, solid white background #FFFFFF, ${base}. Only ONE object, no person, no character, isolated object on white.`
     }
     return base
   }, [categories, currentState.values, page])
