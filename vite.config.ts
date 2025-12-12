@@ -1,23 +1,23 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
-import { writeFileSync, copyFileSync } from 'fs'
 
 export default defineConfig({
-  plugins: [
-    react(),
-    {
-      name: 'copy-404',
-      closeBundle() {
-        // 빌드 후 index.html을 404.html로 복사 (GitHub Pages SPA 지원)
-        copyFileSync(
-          resolve(__dirname, 'dist/index.html'),
-          resolve(__dirname, 'dist/404.html')
-        )
+  plugins: [react()],
+  // Vercel 배포용 (루트 경로)
+  base: '/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React 코어
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // ReactFlow (워크스페이스용 - 가장 큰 라이브러리)
+          'vendor-reactflow': ['reactflow'],
+        }
       }
-    }
-  ],
-  base: '/company-platform/',
+    },
+    chunkSizeWarningLimit: 500,
+  },
   server: {
     port: 3000,
     proxy: {

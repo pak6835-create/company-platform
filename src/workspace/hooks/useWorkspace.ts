@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Node, Edge, useNodesState, useEdgesState, useReactFlow } from 'reactflow'
+import { useNodesState, useEdgesState } from 'reactflow'
 import { WorkspaceData, Board, TrayItem } from '../types'
 import { loadWorkspaceData, saveWorkspaceData } from '../utils/storage'
 
@@ -21,7 +21,7 @@ export function useWorkspace() {
     let boardId: string | null = workspaceData.currentBoardId
 
     while (boardId) {
-      const board = workspaceData.boards[boardId]
+      const board: Board | undefined = workspaceData.boards[boardId]
       if (board) {
         path.unshift(board)
         boardId = board.parentId

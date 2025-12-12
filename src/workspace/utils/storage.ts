@@ -1,4 +1,4 @@
-import { WorkspaceData, Board } from '../types'
+import { WorkspaceData } from '../types'
 
 const STORAGE_KEY = 'workspace_data'
 

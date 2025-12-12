@@ -6,12 +6,39 @@ export default function WorkspaceDashboard() {
 
   return (
     <div className="workspace-dashboard">
+      {/* 왼쪽 상단 홈 버튼 */}
+      <button className="back-btn-top" onClick={() => navigate('/')}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        홈으로
+      </button>
+
       <div className="dashboard-header">
         <h1>Canvas Fold</h1>
         <p>웹툰 제작을 위한 AI 워크스페이스</p>
       </div>
 
       <div className="dashboard-cards">
+        {/* AI 캐릭터 생성 카드 */}
+        <div
+          className="dashboard-card ai-card"
+          onClick={() => navigate('/workspace/ai-generator')}
+        >
+          <div className="card-icon">🤖</div>
+          <h2>AI 캐릭터 생성</h2>
+          <p>캐릭터 생성 및 이미지 편집</p>
+          <ul className="card-features">
+            <li>캐릭터 메이커 (속성 선택)</li>
+            <li>이미지 편집 (표정/의상/배경)</li>
+            <li>투명 배경 자동 생성</li>
+            <li>Gemini AI 기반</li>
+          </ul>
+          <div className="card-action">
+            <span>시작하기 →</span>
+          </div>
+        </div>
+
         {/* 화이트보드 카드 */}
         <div
           className="dashboard-card whiteboard-card"
@@ -19,11 +46,11 @@ export default function WorkspaceDashboard() {
         >
           <div className="card-icon">🎨</div>
           <h2>화이트보드</h2>
-          <p>노드 기반 AI 이미지 생성 워크스페이스</p>
+          <p>노드 기반 자유 작업 공간</p>
           <ul className="card-features">
-            <li>AI 이미지 생성 (Gemini)</li>
-            <li>포즈 변경 / 배경 제거</li>
-            <li>무한 캔버스 & 노드 연결</li>
+            <li>무한 캔버스</li>
+            <li>노트 / 이미지 / 텍스트</li>
+            <li>체크리스트 / 링크카드</li>
             <li>드래그앤드롭 작업</li>
           </ul>
           <div className="card-action">
@@ -60,12 +87,6 @@ export default function WorkspaceDashboard() {
         </div>
       </div>
 
-      {/* 하단 링크 */}
-      <div className="dashboard-footer">
-        <button onClick={() => navigate('/')} className="back-btn">
-          ← 홈으로 돌아가기
-        </button>
-      </div>
     </div>
   )
 }

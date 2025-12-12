@@ -14,7 +14,7 @@ export interface SliderItem {
   step?: number
   unit?: string
   labels?: string[]
-  prompt: (value: number, lightness?: number) => string
+  prompt: (value: number, saturation?: number, lightness?: number) => string
 }
 
 // 태그 아이템 타입
@@ -32,6 +32,13 @@ export interface Category {
   name: string
   icon: string
   items: Record<string, CategoryItem>
+}
+
+// 프리셋 타입
+export interface Preset {
+  name: string
+  icon: string
+  data: Record<string, unknown>
 }
 
 // 색상 이름 변환
@@ -290,15 +297,26 @@ export const CHAR_CATEGORIES: Record<string, Category> = {
         icon: '😊',
         tags: [
           ['neutral', '무표정'],
-          ['smiling', '미소'],
-          ['laughing', '웃음'],
-          ['sad', '슬픔'],
-          ['angry', '화남'],
-          ['surprised', '놀람'],
+          ['gentle smile', '미소'],
+          ['big smile laughing', '활짝웃음'],
+          ['sad teary', '슬픔'],
+          ['angry frowning', '화남'],
+          ['surprised wide eyes', '놀람'],
+          ['smirk confident', '능글'],
+          ['pleading puppy eyes', '애처로움'],
+          ['blushing embarrassed', '부끄럼'],
+          ['thinking contemplating', '생각'],
           ['shy', '수줍음'],
           ['serious', '진지함'],
           ['seductive', '매혹적'],
-          ['crying', '눈물'],
+          ['crying tears', '눈물'],
+          ['yawning sleepy', '졸림'],
+          ['disgusted', '역겨움'],
+          ['fearful scared', '두려움'],
+          ['pouting', '삐짐'],
+          ['cool confident mysterious', '시크'],
+          ['winking playful', '윙크'],
+          ['determined focused', '결연함'],
         ],
       },
       wrinkles: {
@@ -377,6 +395,28 @@ export const CHAR_CATEGORIES: Record<string, Category> = {
     name: '상체',
     icon: '👕',
     items: {
+      outfitSet: {
+        name: '의상세트',
+        icon: '👔',
+        tags: [
+          ['formal black suit white shirt tie', '🤵 정장'],
+          ['casual hoodie jeans', '👕 캐주얼'],
+          ['Korean hanbok traditional', '👘 한복'],
+          ['school uniform blazer', '🎓 교복'],
+          ['medieval knight armor', '⚔️ 갑옷'],
+          ['elegant ball gown dress', '👗 드레스'],
+          ['sports jersey shorts', '🏃 운동복'],
+          ['chef uniform apron', '👨‍🍳 셰프'],
+          ['doctor white coat stethoscope', '👨‍⚕️ 의사'],
+          ['military combat uniform', '🎖️ 군복'],
+          ['swimsuit beach', '👙 수영복'],
+          ['pajamas sleepwear', '😴 잠옷'],
+          ['maid outfit frilly', '🎀 메이드'],
+          ['nurse uniform', '👩‍⚕️ 간호사'],
+          ['police uniform', '👮 경찰'],
+          ['kimono japanese', '🎎 기모노'],
+        ],
+      },
       topLayer1: {
         name: '상의1(안쪽)',
         icon: '👕',
@@ -779,6 +819,15 @@ export const CHAR_CATEGORIES: Record<string, Category> = {
           ['dramatic', '극적인'],
           ['soft', '부드러운'],
           ['vibrant', '생동감있는'],
+          ['cinematic', '시네마틱'],
+          ['romantic', '로맨틱'],
+          ['mysterious', '신비로운'],
+          ['peaceful', '평화로운'],
+          ['epic', '웅장한'],
+          ['emotional', '감성적인'],
+          ['dreamy', '몽환적인'],
+          ['luxurious', '럭셔리'],
+          ['noir', '느와르'],
         ],
       },
     },
@@ -791,18 +840,52 @@ export const CHAR_CATEGORIES: Record<string, Category> = {
         name: '제외할것',
         icon: '⛔',
         tags: [
+          // 품질 관련
           ['low quality', '저품질'],
           ['blurry', '흐린'],
           ['ugly', '못생긴'],
+          ['jpeg artifacts', 'JPEG아티팩트'],
+          ['noise', '노이즈'],
+          ['grainy', '거친화질'],
+          // 해부학 오류
           ['deformed', '변형'],
           ['bad anatomy', '해부학오류'],
+          ['disfigured', '기형'],
+          ['mutated', '돌연변이'],
+          ['malformed', '비정상'],
+          // 팔다리 오류
           ['extra limbs', '팔다리추가'],
           ['missing limbs', '팔다리없음'],
+          ['fused limbs', '팔다리융합'],
+          ['long neck', '긴목'],
+          ['long body', '긴몸'],
+          // 손/손가락 오류
           ['extra fingers', '손가락추가'],
+          ['missing fingers', '손가락없음'],
           ['bad hands', '이상한손'],
+          ['mutated hands', '돌연변이손'],
+          ['extra hands', '손추가'],
+          ['fused fingers', '손가락융합'],
+          // 얼굴/눈 오류
+          ['bad face', '이상한얼굴'],
+          ['ugly face', '못생긴얼굴'],
+          ['extra eyes', '눈추가'],
+          ['bad eyes', '이상한눈'],
+          ['cross-eyed', '사시'],
+          ['asymmetric eyes', '비대칭눈'],
+          // 구도 문제
+          ['cropped', '잘린'],
+          ['out of frame', '프레임밖'],
+          ['cut off', '잘림'],
+          ['poorly drawn', '서툰그림'],
+          // 기타
           ['multiple characters', '여러캐릭터'],
+          ['duplicate', '중복'],
+          ['clone', '복제'],
           ['watermark', '워터마크'],
           ['text', '텍스트'],
+          ['logo', '로고'],
+          ['signature', '서명'],
         ],
         isNeg: true,
       },
@@ -1094,6 +1177,21 @@ export const BG_CATEGORIES: Record<string, Category> = {
           ['watermark', '워터마크'],
           ['text', '텍스트'],
           ['cropped', '잘린'],
+          ['person', '사람'],
+          ['human', '인물'],
+          ['character', '캐릭터'],
+          ['face', '얼굴'],
+          ['hand', '손'],
+          ['animal', '동물'],
+          ['creature', '생물'],
+          ['logo', '로고'],
+          ['signature', '서명'],
+          ['border', '테두리'],
+          ['frame', '프레임'],
+          ['distorted', '왜곡'],
+          ['oversaturated', '과포화'],
+          ['overexposed', '노출과다'],
+          ['underexposed', '노출부족'],
         ],
         isNeg: true,
       },
@@ -1101,12 +1199,429 @@ export const BG_CATEGORIES: Record<string, Category> = {
   },
 }
 
-// 프리셋
-export interface Preset {
-  name: string
-  icon: string
-  data: Record<string, unknown>
+// 어셋(소품) 카테고리 - 캐릭터 제외 오브젝트만
+export const ASSET_CATEGORIES: Record<string, Category> = {
+  style: {
+    name: '스타일',
+    icon: '🎨',
+    items: {
+      artStyle: {
+        name: '그림체',
+        icon: '🎨',
+        tags: [
+          ['webtoon style', '웹툰'],
+          ['anime style', '애니메'],
+          ['game asset', '게임어셋'],
+          ['concept art', '컨셉아트'],
+          ['realistic', '실사'],
+          ['cartoon', '카툰'],
+          ['pixel art', '픽셀'],
+          ['isometric', '등각투영'],
+        ],
+      },
+      quality: {
+        name: '품질',
+        icon: '✨',
+        tags: [
+          ['masterpiece', '걸작'],
+          ['best quality', '최고품질'],
+          ['highly detailed', '상세한'],
+          ['sharp focus', '선명'],
+          ['clean lines', '깔끔한선'],
+        ],
+      },
+      renderStyle: {
+        name: '렌더링',
+        icon: '💎',
+        tags: [
+          ['flat shading', '플랫'],
+          ['cel shading', '셀셰이딩'],
+          ['soft shading', '소프트'],
+          ['3d render', '3D렌더'],
+          ['hand painted', '핸드페인트'],
+        ],
+      },
+    },
+  },
+  category: {
+    name: '분류',
+    icon: '📦',
+    items: {
+      itemType: {
+        name: '종류',
+        icon: '📦',
+        tags: [
+          ['weapon', '무기'],
+          ['armor', '갑옷'],
+          ['clothing', '의복'],
+          ['accessory', '악세서리'],
+          ['tool', '도구'],
+          ['furniture', '가구'],
+          ['vehicle', '탈것'],
+          ['food', '음식'],
+          ['potion', '물약'],
+          ['treasure', '보물'],
+          ['plant', '식물'],
+          ['material', '재료'],
+        ],
+      },
+      size: {
+        name: '크기',
+        icon: '📐',
+        tags: [
+          ['tiny', '아주작은'],
+          ['small', '작은'],
+          ['medium', '중간'],
+          ['large', '큰'],
+          ['huge', '거대한'],
+        ],
+      },
+    },
+  },
+  weapon: {
+    name: '무기',
+    icon: '⚔️',
+    items: {
+      weaponType: {
+        name: '종류',
+        icon: '⚔️',
+        tags: [
+          ['sword', '검'],
+          ['longsword', '장검'],
+          ['katana', '카타나'],
+          ['dagger', '단검'],
+          ['spear', '창'],
+          ['halberd', '미늘창'],
+          ['axe', '도끼'],
+          ['hammer', '망치'],
+          ['bow', '활'],
+          ['crossbow', '석궁'],
+          ['staff', '지팡이'],
+          ['wand', '마법봉'],
+          ['gun', '총'],
+          ['rifle', '소총'],
+          ['pistol', '권총'],
+          ['scythe', '낫'],
+          ['whip', '채찍'],
+          ['shield', '방패'],
+        ],
+      },
+      weaponMaterial: {
+        name: '재질',
+        icon: '🔩',
+        tags: [
+          ['steel', '강철'],
+          ['iron', '철'],
+          ['bronze', '청동'],
+          ['gold', '황금'],
+          ['silver', '은'],
+          ['obsidian', '흑요석'],
+          ['crystal', '수정'],
+          ['bone', '뼈'],
+          ['wood', '나무'],
+          ['magic', '마법'],
+        ],
+      },
+      weaponStyle: {
+        name: '스타일',
+        icon: '🎭',
+        tags: [
+          ['medieval', '중세'],
+          ['fantasy', '판타지'],
+          ['oriental', '동양'],
+          ['futuristic', '미래'],
+          ['steampunk', '스팀펑크'],
+          ['cursed', '저주받은'],
+          ['holy', '신성한'],
+          ['demonic', '악마의'],
+          ['legendary', '전설의'],
+          ['rusty', '녹슨'],
+          ['ornate', '장식된'],
+        ],
+      },
+    },
+  },
+  clothing: {
+    name: '의복',
+    icon: '👕',
+    items: {
+      clothingType: {
+        name: '종류',
+        icon: '👕',
+        tags: [
+          ['shirt', '셔츠'],
+          ['blouse', '블라우스'],
+          ['jacket', '재킷'],
+          ['coat', '코트'],
+          ['robe', '로브'],
+          ['dress', '드레스'],
+          ['pants', '바지'],
+          ['skirt', '치마'],
+          ['cloak', '망토'],
+          ['cape', '케이프'],
+          ['armor piece', '갑옷조각'],
+          ['hat', '모자'],
+          ['gloves', '장갑'],
+          ['boots', '부츠'],
+          ['belt', '벨트'],
+        ],
+      },
+      fabric: {
+        name: '원단',
+        icon: '🧵',
+        tags: [
+          ['cotton', '면'],
+          ['silk', '실크'],
+          ['wool', '양모'],
+          ['leather', '가죽'],
+          ['velvet', '벨벳'],
+          ['lace', '레이스'],
+          ['denim', '데님'],
+          ['fur', '모피'],
+          ['chainmail', '사슬갑옷'],
+          ['plate', '판금'],
+        ],
+      },
+      clothingColor: {
+        name: '색상',
+        icon: '🎨',
+        type: 'hue',
+        prompt: (h, s = 70, l = 50) => getColorPrompt(h, s, l) + ' colored',
+      },
+    },
+  },
+  accessory: {
+    name: '악세서리',
+    icon: '💍',
+    items: {
+      accessoryType: {
+        name: '종류',
+        icon: '💍',
+        tags: [
+          ['ring', '반지'],
+          ['necklace', '목걸이'],
+          ['bracelet', '팔찌'],
+          ['earring', '귀걸이'],
+          ['crown', '왕관'],
+          ['tiara', '티아라'],
+          ['hairpin', '머리핀'],
+          ['ribbon', '리본'],
+          ['brooch', '브로치'],
+          ['amulet', '부적'],
+          ['pendant', '펜던트'],
+          ['glasses', '안경'],
+          ['mask', '가면'],
+          ['bag', '가방'],
+          ['backpack', '배낭'],
+        ],
+      },
+      gemstone: {
+        name: '보석',
+        icon: '💎',
+        tags: [
+          ['diamond', '다이아몬드'],
+          ['ruby', '루비'],
+          ['sapphire', '사파이어'],
+          ['emerald', '에메랄드'],
+          ['amethyst', '자수정'],
+          ['pearl', '진주'],
+          ['topaz', '토파즈'],
+          ['opal', '오팔'],
+        ],
+      },
+    },
+  },
+  prop: {
+    name: '소품',
+    icon: '🏺',
+    items: {
+      propType: {
+        name: '종류',
+        icon: '🏺',
+        tags: [
+          ['book', '책'],
+          ['scroll', '두루마리'],
+          ['potion bottle', '물약병'],
+          ['key', '열쇠'],
+          ['candle', '양초'],
+          ['lantern', '랜턴'],
+          ['chest', '상자'],
+          ['barrel', '통'],
+          ['crate', '나무상자'],
+          ['vase', '꽃병'],
+          ['mirror', '거울'],
+          ['clock', '시계'],
+          ['compass', '나침반'],
+          ['map', '지도'],
+          ['coin', '동전'],
+          ['gem', '보석'],
+          ['skull', '해골'],
+          ['flag', '깃발'],
+          ['banner', '현수막'],
+          ['torch', '횃불'],
+        ],
+      },
+      propMaterial: {
+        name: '재질',
+        icon: '🪨',
+        tags: [
+          ['wood', '나무'],
+          ['stone', '돌'],
+          ['metal', '금속'],
+          ['glass', '유리'],
+          ['ceramic', '도자기'],
+          ['fabric', '천'],
+          ['paper', '종이'],
+          ['crystal', '수정'],
+        ],
+      },
+    },
+  },
+  view: {
+    name: '구도',
+    icon: '📷',
+    items: {
+      viewAngle: {
+        name: '각도',
+        icon: '📷',
+        tags: [
+          ['front view', '정면'],
+          ['side view', '측면'],
+          ['three quarter view', '3/4뷰'],
+          ['top view', '위에서'],
+          ['isometric view', '등각뷰'],
+          ['close up', '클로즈업'],
+          ['full view', '전체뷰'],
+        ],
+      },
+      background: {
+        name: '배경',
+        icon: '🖼️',
+        tags: [
+          ['white background', '흰배경'],
+          ['transparent background', '투명배경'],
+          ['simple background', '단순배경'],
+          ['gradient background', '그라데이션'],
+          ['dark background', '어두운배경'],
+          ['studio lighting', '스튜디오조명'],
+        ],
+      },
+    },
+  },
+  negative: {
+    name: '네거티브',
+    icon: '⛔',
+    items: {
+      negative: {
+        name: '제외할것',
+        icon: '⛔',
+        tags: [
+          ['person', '사람'],
+          ['human', '인물'],
+          ['character', '캐릭터'],
+          ['face', '얼굴'],
+          ['hand', '손'],
+          ['body', '몸'],
+          ['animal', '동물'],
+          ['creature', '생물'],
+          ['low quality', '저품질'],
+          ['blurry', '흐린'],
+          ['ugly', '못생긴'],
+          ['watermark', '워터마크'],
+          ['text', '텍스트'],
+          ['logo', '로고'],
+          ['multiple items', '여러개'],
+          ['duplicate', '중복'],
+        ],
+        isNeg: true,
+      },
+    },
+  },
 }
+
+// 어셋 프리셋
+export const ASSET_PRESETS: Preset[] = [
+  {
+    name: '⚔️ 판타지 검',
+    icon: '⚔️',
+    data: {
+      artStyle: ['game asset', 'concept art'],
+      quality: ['masterpiece', 'best quality', 'highly detailed'],
+      itemType: ['weapon'],
+      weaponType: ['sword'],
+      weaponMaterial: ['steel'],
+      weaponStyle: ['fantasy', 'ornate'],
+      viewAngle: ['three quarter view'],
+      background: ['transparent background'],
+    },
+  },
+  {
+    name: '🏹 마법 활',
+    icon: '🏹',
+    data: {
+      artStyle: ['game asset', 'concept art'],
+      quality: ['masterpiece', 'best quality'],
+      itemType: ['weapon'],
+      weaponType: ['bow'],
+      weaponMaterial: ['wood', 'magic'],
+      weaponStyle: ['fantasy', 'legendary'],
+      viewAngle: ['side view'],
+      background: ['transparent background'],
+    },
+  },
+  {
+    name: '👗 공주 드레스',
+    icon: '👗',
+    data: {
+      artStyle: ['webtoon style', 'concept art'],
+      quality: ['masterpiece', 'best quality', 'highly detailed'],
+      itemType: ['clothing'],
+      clothingType: ['dress'],
+      fabric: ['silk', 'lace'],
+      viewAngle: ['front view'],
+      background: ['white background'],
+    },
+  },
+  {
+    name: '💎 마법 목걸이',
+    icon: '💎',
+    data: {
+      artStyle: ['game asset'],
+      quality: ['masterpiece', 'highly detailed'],
+      itemType: ['accessory'],
+      accessoryType: ['necklace', 'pendant'],
+      gemstone: ['sapphire'],
+      viewAngle: ['front view'],
+      background: ['transparent background'],
+    },
+  },
+  {
+    name: '📜 고대 두루마리',
+    icon: '📜',
+    data: {
+      artStyle: ['concept art'],
+      quality: ['best quality', 'highly detailed'],
+      itemType: ['tool'],
+      propType: ['scroll', 'book'],
+      propMaterial: ['paper'],
+      viewAngle: ['three quarter view'],
+      background: ['simple background'],
+    },
+  },
+  {
+    name: '🧪 물약 세트',
+    icon: '🧪',
+    data: {
+      artStyle: ['game asset', 'cartoon'],
+      quality: ['masterpiece', 'clean lines'],
+      itemType: ['potion'],
+      propType: ['potion bottle'],
+      propMaterial: ['glass'],
+      viewAngle: ['front view'],
+      background: ['transparent background'],
+    },
+  },
+]
 
 export const CHAR_PRESETS: Preset[] = [
   // === 🔥 트렌디 웹툰 캐릭터 ===

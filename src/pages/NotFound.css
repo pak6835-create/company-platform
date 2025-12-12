@@ -1,0 +1,123 @@
+.notfound-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 40px 20px;
+}
+
+.notfound-container {
+  text-align: center;
+  max-width: 500px;
+}
+
+.notfound-code {
+  font-size: 8rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 24px;
+}
+
+.notfound-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px 0;
+}
+
+.notfound-desc {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin: 0 0 40px 0;
+  line-height: 1.6;
+}
+
+.notfound-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 48px;
+}
+
+.notfound-btn {
+  padding: 14px 28px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.notfound-btn.primary {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
+}
+
+.notfound-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+}
+
+.notfound-btn.secondary {
+  background: var(--bg-secondary);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.notfound-btn.secondary:hover {
+  background: var(--bg-tertiary);
+}
+
+.notfound-links {
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.notfound-links p {
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  margin: 0 0 16px 0;
+}
+
+.notfound-link-list {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.notfound-link-list a {
+  font-size: 0.9rem;
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.notfound-link-list a:hover {
+  color: var(--accent);
+}
+
+/* 반응형 */
+@media (max-width: 480px) {
+  .notfound-code {
+    font-size: 5rem;
+  }
+
+  .notfound-title {
+    font-size: 1.4rem;
+  }
+
+  .notfound-actions {
+    flex-direction: column;
+  }
+
+  .notfound-btn {
+    width: 100%;
+    text-align: center;
+  }
+}

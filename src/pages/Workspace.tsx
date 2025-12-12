@@ -635,19 +635,6 @@ function WorkspaceCanvas() {
       let newNode: Node
 
       switch (nodeType) {
-        case 'aiGenerator':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'aiGenerator',
-            position,
-            data: {
-              onGenerate: (imageUrl: string, label: string) => {
-                addImageToCanvas(imageUrl, label)
-              },
-            },
-            style: { width: 900, height: 700 },
-          }
-          break
         case 'note':
           const color = nodeData || '#fef3c7'
           newNode = {
@@ -716,15 +703,6 @@ function WorkspaceCanvas() {
           setWorkspaceData(updatedData)
           saveWorkspaceData(updatedData)
           break
-        case 'reference':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'reference',
-            position,
-            data: { referenceType: 'pose', strength: 0.8, selectedOptions: [] },
-            style: { width: 280, height: 400 },
-          }
-          break
         case 'transparentBg':
           newNode = {
             id: getNewNodeId(),
@@ -732,15 +710,6 @@ function WorkspaceCanvas() {
             position,
             data: {},
             style: { width: 400, height: 580 },
-          }
-          break
-        case 'edit':
-          newNode = {
-            id: getNewNodeId(),
-            type: 'edit',
-            position,
-            data: {},
-            style: { width: 750, height: 620 },
           }
           break
         case 'linkCard':
@@ -921,19 +890,6 @@ function WorkspaceCanvas() {
     let newNode: Node
 
     switch (nodeType) {
-      case 'aiGenerator':
-        newNode = {
-          id: getNewNodeId(),
-          type: 'aiGenerator',
-          position,
-          data: {
-            onGenerate: (imageUrl: string, label: string) => {
-              addImageToCanvas(imageUrl, label)
-            },
-          },
-          style: { width: 900, height: 700 },
-        }
-        break
       case 'note':
         newNode = {
           id: getNewNodeId(),
@@ -961,15 +917,6 @@ function WorkspaceCanvas() {
           style: { width: 400, height: 580 },
         }
         break
-      case 'edit':
-        newNode = {
-          id: getNewNodeId(),
-          type: 'edit',
-          position,
-          data: {},
-          style: { width: 750, height: 620 },
-        }
-        break
       default:
         closeContextMenu()
         return
@@ -995,7 +942,7 @@ function WorkspaceCanvas() {
         <button
           className="toolbar-group-button exit-button"
           data-tooltip="나가기"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/workspace')}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -1093,25 +1040,7 @@ function WorkspaceCanvas() {
             </button>
           </div>
           <div className="add-panel-content add-panel-scrollable">
-            {/* 캐릭터 메이커 (AI 이미지 생성 통합) */}
-            <div className="add-section">
-              <h4>캐릭터 메이커</h4>
-              <div className="draggable-items">
-                <div
-                  className="draggable-item ai-generator-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'aiGenerator')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">🎨</span>
-                  <span>캐릭터 메이커</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 후처리 */}
+            {/* 도구 */}
             <div className="add-section">
               <h4>도구</h4>
               <div className="draggable-items">
@@ -1125,17 +1054,6 @@ function WorkspaceCanvas() {
                 >
                   <span className="drag-icon">🎭</span>
                   <span>투명 배경 생성기</span>
-                </div>
-                <div
-                  className="draggable-item edit-drag"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/reactflow-type', 'edit')
-                    e.dataTransfer.effectAllowed = 'move'
-                  }}
-                >
-                  <span className="drag-icon">✏️</span>
-                  <span>편집</span>
                 </div>
               </div>
             </div>
@@ -1368,21 +1286,9 @@ function WorkspaceCanvas() {
               <div className="context-menu-submenu-title">노드 추가</div>
               <div
                 className="context-menu-item"
-                onClick={() => handleContextMenuAddNode('aiGenerator')}
-              >
-                🎨 캐릭터 메이커
-              </div>
-              <div
-                className="context-menu-item"
                 onClick={() => handleContextMenuAddNode('transparentBg')}
               >
                 🎭 투명 배경 생성기
-              </div>
-              <div
-                className="context-menu-item"
-                onClick={() => handleContextMenuAddNode('edit')}
-              >
-                ✏️ 편집
               </div>
               <div className="context-menu-divider" />
               <div

@@ -9,9 +9,10 @@ import { useSharedLibrary } from '../../context/SharedLibraryContext'
 import {
   CHAR_CATEGORIES,
   BG_CATEGORIES,
+  ASSET_CATEGORIES,
   CHAR_PRESETS,
   BG_PRESETS,
-  REF_TYPES,
+  ASSET_PRESETS,
   getColorName,
   getColorNameKo,
   getColorPrompt,
@@ -21,14 +22,25 @@ import {
   type TagItem,
   type Preset,
 } from './data'
-import { generateImage, editImage, createTransparentImage, MODELS, HIGH_RES_MODELS, type ImageSize, type AspectRatio, IMAGE_SIZES, ASPECT_RATIOS } from './geminiApi'
+import { generateImage, generateImageModelScope, editImage, createTransparentImage, MODELS, HIGH_RES_MODELS, getModelProvider, type ImageSize, type AspectRatio, IMAGE_SIZES, ASPECT_RATIOS } from './geminiApi'
 import './AIStudio.css'
+
+// 참조 이미지 역할 정의
+const REF_ROLES = [
+  { id: 'style', name: '화풍', icon: '🎨', prompt: 'match the art style and color palette' },
+  { id: 'pose', name: '포즈', icon: '🏃', prompt: 'match the pose and body position' },
+  { id: 'outfit', name: '의상', icon: '👕', prompt: 'use the same outfit and clothing' },
+  { id: 'color', name: '색감', icon: '🌈', prompt: 'use the same color scheme' },
+  { id: 'face', name: '얼굴', icon: '👤', prompt: 'match the facial features' },
+  { id: 'bg', name: '배경', icon: '🏞️', prompt: 'use the same background' },
+  { id: 'object', name: '오브젝트', icon: '📦', prompt: 'include this object in the image' },
+] as const
 
 // 참조 이미지 타입
 interface RefImage {
   url: string
   b64: string
-  type: string
+  type: string  // REF_ROLES의 id
   strength: number
 }
 
@@ -56,7 +68,7 @@ interface GeneratingSlot {
   progress?: string // 진행 상태 메시지
 }
 
-type PageType = 'char' | 'bg'
+type PageType = 'char' | 'bg' | 'asset'
 
 interface AIStudioProps {
   onImageGenerated?: (url: string, prompt: string) => void
@@ -77,7 +89,13 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
   // 다중 선택 상태 (라이브러리에서 Ctrl+클릭으로 여러 이미지 선택)
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const [previewIndex, setPreviewIndex] = useState<number>(-1) // 현재 미리보기 중인 이미지 (선택된 이미지 중)
-  const [previewHeight, setPreviewHeight] = useState(450) // 미리보기 패널 높이 (리사이즈 가능)
+  const [libWidth, setLibWidth] = useState(240) // 라이브러리 패널 너비 (리사이즈 가능)
+  const [previewZoom, setPreviewZoom] = useState(1) // 미리보기 확대/축소 배율
+  const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 }) // 패닝 오프셋
+  const [isPanning, setIsPanning] = useState(false) // 스페이스+드래그 패닝 중
+  const [isSpacePressed, setIsSpacePressed] = useState(false) // 스페이스바 눌림 상태
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 }) // 패닝 시작 위치
+  const [rightPanelTab, setRightPanelTab] = useState<'generate' | 'edit'>('generate') // 우측 패널 탭
   const [isResizing, setIsResizing] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false) // 라이브러리 드래그앤드롭 상태
 
@@ -111,14 +129,30 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
   const [editTargetImage, setEditTargetImage] = useState<LibraryImage | null>(null)
   const [editPromptText, setEditPromptText] = useState('')
   const [isEditing, setIsEditing] = useState(false)
-  // 편집용 참조 이미지 (소품 추가 등)
-  const [editRefImages, setEditRefImages] = useState<{ url: string; b64: string }[]>([])
+  // 편집용 참조 이미지 (타입 포함)
+  const [editRefImages, setEditRefImages] = useState<RefImage[]>([])
+  // 편집 시 유지할 옵션
+  const [editPreserveOptions, setEditPreserveOptions] = useState({
+    style: true,      // 스타일 유지
+    expression: true, // 표정 유지
+    pose: false,      // 포즈 유지
+    background: false // 배경 유지
+  })
+
+  // 편집용 해상도/종횡비/투명배경 설정
+  const [editResolution, setEditResolution] = useState<ImageSize>('1K')
+  const [editRatio, setEditRatio] = useState<AspectRatio>('1:1')
+  const [editTransparent, setEditTransparent] = useState(false)
+
+  // 미리보기 편집 도구 상태
+  const [editTool, setEditTool] = useState<'select' | 'lasso' | 'canvas' | 'marker' | 'eyedropper' | 'bucket' | 'pen'>('select')
 
   // 투명화 처리 상태
   const [transparentProgress, setTransparentProgress] = useState<string | null>(null)
 
   // 생성 시 투명배경 옵션
   const [generateTransparent, setGenerateTransparent] = useState(false)
+
 
   // 생성 중인 이미지 슬롯 (로딩 표시용)
   const [generatingSlots, setGeneratingSlots] = useState<GeneratingSlot[]>([])
@@ -148,6 +182,12 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
     negTags: ['low quality', 'blurry', 'watermark', 'text'],
     refImgs: [],
   })
+  const [assetState, setAssetState] = useState<PageState>({
+    cat: 'style',
+    values: {},
+    negTags: ['person', 'human', 'character', 'face', 'hand', 'low quality', 'blurry'],
+    refImgs: [],
+  })
 
   // 라이브러리
   const [library, setLibrary] = useState<LibraryImage[]>([])
@@ -165,17 +205,25 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
   const [globalSat, setGlobalSat] = useState(70)
   const [globalLight, setGlobalLight] = useState(50)
 
-  // 사용한 색상 팔레트 (최근 사용 색상 저장)
-  const [colorPalette, setColorPalette] = useState<Array<{h: number, s: number, l: number}>>(() => {
+  // 색상 팔레트 (40칸 고정: 10x4, null은 빈칸)
+  const [colorPalette, setColorPalette] = useState<Array<{h: number, s: number, l: number} | null>>(() => {
     const saved = localStorage.getItem('ai-studio-color-palette')
-    return saved ? JSON.parse(saved) : []
+    const parsed = saved ? JSON.parse(saved) : []
+    // 40칸 고정 (부족하면 null로 채움)
+    const palette = new Array(40).fill(null)
+    parsed.forEach((c: {h: number, s: number, l: number} | null, i: number) => {
+      if (i < 40) palette[i] = c
+    })
+    return palette
   })
+  // 선택된 팔레트 슬롯 인덱스 (버킷으로 채울 때 사용)
+  const [selectedPaletteIndex, setSelectedPaletteIndex] = useState<number | null>(null)
 
   // 현재 페이지 상태
-  const currentState = page === 'char' ? charState : bgState
-  const setCurrentState = page === 'char' ? setCharState : setBgState
-  const categories = page === 'char' ? CHAR_CATEGORIES : BG_CATEGORIES
-  const presets = page === 'char' ? CHAR_PRESETS : BG_PRESETS
+  const currentState = page === 'char' ? charState : page === 'bg' ? bgState : assetState
+  const setCurrentState = page === 'char' ? setCharState : page === 'bg' ? setBgState : setAssetState
+  const categories = page === 'char' ? CHAR_CATEGORIES : page === 'bg' ? BG_CATEGORIES : ASSET_CATEGORIES
+  const presets = page === 'char' ? CHAR_PRESETS : page === 'bg' ? BG_PRESETS : ASSET_PRESETS
 
   // 카테고리 선택
   const selectCategory = useCallback(
@@ -238,11 +286,11 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
       ...prev,
       values: { ...prev.values, [key]: { h: globalHue, s: globalSat, l: globalLight } },
     }))
-    // 팔레트에 색상 추가 (중복 제거, 최대 16개)
+    // 팔레트에 색상 추가 (중복 제거, 최대 40개)
     setColorPalette(prev => {
-      const exists = prev.some(c => c.h === globalHue && c.s === globalSat && c.l === globalLight)
+      const exists = prev.some(c => c && c.h === globalHue && c.s === globalSat && c.l === globalLight)
       if (exists) return prev
-      const newPalette = [{ h: globalHue, s: globalSat, l: globalLight }, ...prev].slice(0, 16)
+      const newPalette = [{ h: globalHue, s: globalSat, l: globalLight }, ...prev].slice(0, 40)
       localStorage.setItem('ai-studio-color-palette', JSON.stringify(newPalette))
       return newPalette
     })
@@ -406,6 +454,8 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
     let base = parts.join(', ')
     if (page === 'char') {
       base = `A single character, full body, pure white background, ${base}. Only ONE character.`
+    } else if (page === 'asset') {
+      base = `A single item, product shot, centered, ${base}. Only ONE object, no person, no character.`
     }
     return base
   }, [categories, currentState.values, page])
@@ -432,10 +482,19 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
       })
     } else {
       // 참조 이미지가 없으면 generateImage 사용
-      result = await generateImage(apiKey, fullPrompt, model, {
-        imageSize: resolution,
-        aspectRatio: ratio,
-      })
+      const provider = getModelProvider(model)
+      if (provider === 'modelscope') {
+        // ModelScope Z-Image-Turbo
+        result = await generateImageModelScope(apiKey, fullPrompt, {
+          aspectRatio: ratio,
+        })
+      } else {
+        // Gemini 모델
+        result = await generateImage(apiKey, fullPrompt, model, {
+          imageSize: resolution,
+          aspectRatio: ratio,
+        })
+      }
     }
 
     // 투명배경 옵션이 켜져있으면 투명화 처리
@@ -543,10 +602,17 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
             })
           } else {
             updateSlotProgress(slot.id, '이미지 생성 중...')
-            result = await generateImage(apiKey, fullPrompt, model, {
-              imageSize: resolution,
-              aspectRatio: ratio,
-            })
+            const provider = getModelProvider(model)
+            if (provider === 'modelscope') {
+              result = await generateImageModelScope(apiKey, fullPrompt, {
+                aspectRatio: ratio,
+              })
+            } else {
+              result = await generateImage(apiKey, fullPrompt, model, {
+                imageSize: resolution,
+                aspectRatio: ratio,
+              })
+            }
           }
 
           updateSlotProgress(slot.id, '이미지 수신 완료')
@@ -703,23 +769,78 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
   // 선택된 이미지들
   const selectedImages = selectedIndices.map(i => library[i]).filter(Boolean)
 
-  // 키보드 네비게이션 (좌우 화살표) - 인라인 미리보기용
-  const handlePreviewKeyDown = useCallback((e: KeyboardEvent) => {
+  // 선택된 이미지들 삭제 (handlePreviewKeyDown에서 사용하므로 먼저 정의)
+  const deleteSelectedImages = useCallback(() => {
     if (selectedIndices.length === 0) return
-    if (e.key === 'ArrowLeft') goToPrevSelected()
-    else if (e.key === 'ArrowRight') goToNextSelected()
-    else if (e.key === 'Escape') deselectAll()
-    else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+    if (!confirm(`선택한 ${selectedIndices.length}개 이미지를 삭제하시겠습니까?`)) return
+    setLibrary(prev => prev.filter((_, i) => !selectedIndices.includes(i)))
+    setSelectedIndices([])
+    setPreviewIndex(-1)
+  }, [selectedIndices])
+
+  // 키보드 네비게이션 (상하 화살표)
+  const handlePreviewKeyDown = useCallback((e: KeyboardEvent) => {
+    // textarea나 input에서는 무시
+    if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
+    if (library.length === 0) return
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      // 현재 선택 위치에서 위로 이동 (이전 이미지)
+      const currentIdx = previewIndex >= 0 ? previewIndex : 0
+      const newIdx = currentIdx > 0 ? currentIdx - 1 : library.length - 1
+      setSelectedIndices([newIdx])
+      setPreviewIndex(newIdx)
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      // 현재 선택 위치에서 아래로 이동 (다음 이미지)
+      const currentIdx = previewIndex >= 0 ? previewIndex : -1
+      const newIdx = currentIdx < library.length - 1 ? currentIdx + 1 : 0
+      setSelectedIndices([newIdx])
+      setPreviewIndex(newIdx)
+    } else if (e.key === 'Escape') {
+      deselectAll()
+    } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       selectAll()
+    } else if (e.key === 'Delete' && selectedIndices.length > 0) {
+      deleteSelectedImages()
     }
-  }, [selectedIndices, goToPrevSelected, goToNextSelected, deselectAll, selectAll])
+  }, [selectedIndices, previewIndex, library, deselectAll, selectAll, deleteSelectedImages])
 
   // 키보드 이벤트 등록
   useEffect(() => {
     window.addEventListener('keydown', handlePreviewKeyDown)
     return () => window.removeEventListener('keydown', handlePreviewKeyDown)
   }, [handlePreviewKeyDown])
+
+  // 스페이스바 패닝 모드 핸들러
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat && !(e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement)) {
+        e.preventDefault()
+        setIsSpacePressed(true)
+      }
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false)
+        setIsPanning(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
+
+  // 이미지 선택 변경 시 확대/패닝 초기화
+  useEffect(() => {
+    setPreviewZoom(1)
+    setPreviewPan({ x: 0, y: 0 })
+  }, [previewIndex])
 
   // 라이브러리 이미지 삭제 (확인 포함)
   const deleteLibraryImage = useCallback((index: number) => {
@@ -734,26 +855,17 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
     }
   }, [previewIndex])
 
-  // 선택된 이미지들 삭제
-  const deleteSelectedImages = useCallback(() => {
-    if (selectedIndices.length === 0) return
-    if (!confirm(`선택한 ${selectedIndices.length}개 이미지를 삭제하시겠습니까?`)) return
-    setLibrary(prev => prev.filter((_, i) => !selectedIndices.includes(i)))
-    setSelectedIndices([])
-    setPreviewIndex(-1)
-  }, [selectedIndices])
-
-  // 미리보기 패널 리사이즈 핸들러
+  // 라이브러리 패널 리사이즈 핸들러 (수평)
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     setIsResizing(true)
-    const startY = e.clientY
-    const startHeight = previewHeight
+    const startX = e.clientX
+    const startWidth = libWidth
 
     const handleMouseMove = (e: MouseEvent) => {
-      const delta = startY - e.clientY
-      const newHeight = Math.min(Math.max(startHeight + delta, 200), 800) // 최소 200, 최대 800
-      setPreviewHeight(newHeight)
+      const delta = e.clientX - startX
+      const newWidth = Math.min(Math.max(startWidth + delta, 180), 400) // 최소 180, 최대 400
+      setLibWidth(newWidth)
     }
 
     const handleMouseUp = () => {
@@ -764,7 +876,7 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-  }, [previewHeight])
+  }, [libWidth])
 
   // 라이브러리에 이미지 업로드 (버튼 클릭)
   const handleLibraryUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1102,37 +1214,6 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
               </option>
             ))}
           </select>
-          <select className="sel" value={resolution} onChange={(e) => handleResolutionChange(e.target.value as ImageSize)} title="해상도">
-            {IMAGE_SIZES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <select className="sel" value={ratio} onChange={(e) => setRatio(e.target.value as AspectRatio)} title="비율">
-            {ASPECT_RATIOS.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-          <select className="sel" value={genCount} onChange={(e) => setGenCount(Number(e.target.value))} title="생성 개수">
-            {[1, 2, 3, 4, 6, 8, 10].map((n) => (
-              <option key={n} value={n}>{n}장</option>
-            ))}
-          </select>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowGenModal(true)} title="여러장 생성 옵션">
-            ⚙️ {genMode === 'same' ? '동일' : genMode === 'random' ? '랜덤' : genMode === 'sequence' ? '순차' : '보간'}
-          </button>
-          <label className="transparent-toggle" title="투명배경으로 생성">
-            <input type="checkbox" checked={generateTransparent} onChange={(e) => setGenerateTransparent(e.target.checked)} />
-            <span>🔮</span>
-          </label>
-          {isGenerating ? (
-            <button className="btn btn-danger" onClick={cancelGeneration}>
-              ⏹️ 취소 ({generatingSlots.length})
-            </button>
-          ) : (
-            <button className="btn btn-primary" onClick={handleGenerate}>
-              {generateTransparent ? '🔮 투명생성' : '🎨 생성'}
-            </button>
-          )}
         </div>
       </header>
 
@@ -1147,9 +1228,18 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
             <button className={`page-tab ${page === 'bg' ? 'active' : ''}`} onClick={() => setPage('bg')}>
               🏙️ 배경
             </button>
+            <button className={`page-tab ${page === 'asset' ? 'active' : ''}`} onClick={() => setPage('asset')}>
+              📦 어셋
+            </button>
           </div>
           {/* 캐릭터/배경 페이지에서 카테고리와 설정 표시 */}
           <>
+              {/* 초기화 버튼 */}
+              <div className="left-panel-actions">
+                <button className="btn-reset" onClick={resetAll} title="모든 설정 초기화">
+                  🔄 초기화
+                </button>
+              </div>
               <div className="cat-bar">
                 {Object.entries(categories).map(([key, cat]) => (
                   <button key={key} className={`cat-btn ${currentState.cat === key ? 'active' : ''} ${hasValue(key) ? 'has-val' : ''}`} onClick={() => selectCategory(key)}>
@@ -1160,6 +1250,27 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
               </div>
               <div className="settings">
                 {renderSettings()}
+              </div>
+
+              {/* 프리셋 섹션 (좌측에 배치) */}
+              <div className="panel-section preset-section-left">
+                <div className="panel-title">
+                  <span>📚</span> 프리셋
+                  <button className="btn-add-preset-sm" onClick={() => setShowPresetModal(true)}>+ 저장</button>
+                </div>
+                <div className="preset-grid-left">
+                  {customPresets.map((preset, i) => (
+                    <div key={`c-${i}`} className="preset-chip custom" onClick={() => applyPreset(preset)}>
+                      <span>{preset.name}</span>
+                      <button className="preset-del" onClick={(e) => { e.stopPropagation(); deleteCustomPreset(i) }}>×</button>
+                    </div>
+                  ))}
+                  {presets.map((preset, i) => (
+                    <div key={i} className="preset-chip" onClick={() => applyPreset(preset)}>
+                      {preset.name}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* 컬러 슬라이더 섹션 */}
@@ -1216,84 +1327,84 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
                   <span className="color-slider-value">{globalLight}%</span>
                 </div>
 
-                {/* 최근 사용 색상 */}
-                {colorPalette.length > 0 && (
-                  <div className="mini-palette">
-                    <div className="mini-palette-grid compact">
-                      {colorPalette.slice(0, 16).map((c, i) => (
-                        <button
-                          key={i}
-                          className={`mini-palette-color ${globalHue === c.h && globalSat === c.s && globalLight === c.l ? 'selected' : ''}`}
-                          style={{ background: hslToHex(c.h, c.s, c.l) }}
-                          onClick={() => { setGlobalHue(c.h); setGlobalSat(c.s); setGlobalLight(c.l) }}
-                          title={`H:${c.h} S:${c.s} L:${c.l}`}
-                        />
-                      ))}
-                    </div>
+                {/* 색상 팔레트 (16칸 고정) */}
+                <div className="mini-palette">
+                  <div className="mini-palette-header">
+                    <span className="mini-palette-label">팔레트</span>
+                    <button
+                      className={`btn-bucket ${selectedPaletteIndex !== null ? 'active' : ''}`}
+                      onClick={() => {
+                        if (selectedPaletteIndex !== null) {
+                          // 버킷 클릭: 선택된 슬롯에 현재 색상 채우기
+                          setColorPalette(prev => {
+                            const newPalette = [...prev]
+                            newPalette[selectedPaletteIndex] = { h: globalHue, s: globalSat, l: globalLight }
+                            localStorage.setItem('ai-studio-color-palette', JSON.stringify(newPalette))
+                            return newPalette
+                          })
+                          setSelectedPaletteIndex(null)
+                        }
+                      }}
+                      disabled={selectedPaletteIndex === null}
+                      title="선택된 칸에 현재 색상 채우기"
+                    >
+                      🪣
+                    </button>
+                    <button
+                      className="btn-clear-palette"
+                      onClick={() => {
+                        setColorPalette(new Array(40).fill(null))
+                        localStorage.setItem('ai-studio-color-palette', JSON.stringify(new Array(40).fill(null)))
+                        setSelectedPaletteIndex(null)
+                      }}
+                      title="팔레트 초기화"
+                    >
+                      ✕
+                    </button>
                   </div>
-                )}
+                  <div className="mini-palette-grid-40">
+                    {colorPalette.map((c, i) => (
+                      <button
+                        key={i}
+                        className={`mini-palette-slot ${c ? 'filled' : 'empty'} ${selectedPaletteIndex === i ? 'slot-selected' : ''} ${c && globalHue === c.h && globalSat === c.s && globalLight === c.l ? 'color-active' : ''}`}
+                        style={c ? { background: hslToHex(c.h, c.s, c.l) } : undefined}
+                        onClick={() => {
+                          if (c) {
+                            // 색상이 있으면 해당 색상 선택
+                            setGlobalHue(c.h)
+                            setGlobalSat(c.s)
+                            setGlobalLight(c.l)
+                            setSelectedPaletteIndex(null)
+                          } else {
+                            // 빈칸이면 슬롯 선택 (버킷으로 채울 준비)
+                            setSelectedPaletteIndex(selectedPaletteIndex === i ? null : i)
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          // 우클릭: 슬롯 비우기
+                          setColorPalette(prev => {
+                            const newPalette = [...prev]
+                            newPalette[i] = null
+                            localStorage.setItem('ai-studio-color-palette', JSON.stringify(newPalette))
+                            return newPalette
+                          })
+                        }}
+                        title={c ? `H:${c.h} S:${c.s} L:${c.l} (우클릭: 삭제)` : '클릭하여 선택 후 🪣 버킷으로 채우기'}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              {/* 프리셋 섹션 */}
-              <div className="panel-section left-preset-section">
-                <div className="panel-title">
-                  <span>📚</span> 프리셋
-                  <button className="preset-save-btn" onClick={() => setShowPresetModal(true)} title="현재 설정을 프리셋으로 저장">+ 저장</button>
-                </div>
-                <div className="preset-list compact">
-                  {customPresets.length > 0 && (
-                    <>
-                      <div className="preset-divider">내 프리셋</div>
-                      {customPresets.map((preset, i) => (
-                        <div key={`custom-${i}`} className="preset-item custom" onClick={() => applyPreset(preset)}>
-                          <span className="preset-name">{preset.name}</span>
-                          <button className="preset-del" onClick={(e) => { e.stopPropagation(); deleteCustomPreset(i) }}>×</button>
-                        </div>
-                      ))}
-                      <div className="preset-divider">기본</div>
-                    </>
-                  )}
-                  {presets.slice(0, 6).map((preset, i) => (
-                    <div key={i} className="preset-item" onClick={() => applyPreset(preset)}>
-                      <span className="preset-name">{preset.name.replace(/^[^\s]+\s*/, '')}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 프롬프트 미리보기 */}
-              <div className="panel-section left-prompt-section">
-                <div className="panel-title"><span>✨</span> 프롬프트</div>
-                <div className="prompt-preview">{prompt ? prompt.slice(0, 100) + (prompt.length > 100 ? '...' : '') : '(태그 선택)'}</div>
-                <div className="prompt-actions-mini">
-                  <button className="btn-mini" onClick={resetAll}>🔄 초기화</button>
-                  <button className="btn-mini" onClick={() => navigator.clipboard.writeText(`Positive:\n${prompt}\n\nNegative:\n${negPrompt}`)}>📋 복사</button>
-                </div>
-              </div>
             </>
         </div>
 
-        {/* 중앙 패널: 라이브러리 */}
+        {/* 중앙 패널: 라이브러리 + 미리보기 */}
         <div className="center-panel">
-          <div className="lib-header">
-            <span className="title">📸 라이브러리</span>
-            <span className="count">{library.length}</span>
-            {transparentProgress && (
-              <span className="progress-text" style={{ marginLeft: 10, fontSize: '0.55rem', color: 'var(--purple)' }}>
-                ⏳ {transparentProgress}
-              </span>
-            )}
-            <div className="spacer" />
-            <button className="btn btn-secondary" onClick={() => document.getElementById('lib-upload')?.click()}>
-              📤 업로드
-            </button>
-            <input type="file" id="lib-upload" accept="image/*" multiple hidden onChange={handleLibraryUpload} />
-            <button className="btn btn-secondary" onClick={clearLibrary}>
-              🗑️ 전체삭제
-            </button>
-          </div>
           <div
             className={`lib-area ${isDraggingOver ? 'drag-over' : ''}`}
+            style={{ width: libWidth }}
             onDrop={handleLibraryDrop}
             onDragOver={handleLibraryDragOver}
             onDragLeave={handleLibraryDragLeave}
@@ -1303,6 +1414,22 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
                 <div className="drop-message">📥 이미지를 여기에 놓으세요</div>
               </div>
             )}
+            {/* 라이브러리 헤더 - 그리드 내부 상단에 고정 */}
+            <div className="lib-header-inline">
+              <span className="title">📸 라이브러리</span>
+              <span className="count">{library.length}</span>
+              {transparentProgress && (
+                <span className="progress-text">⏳ {transparentProgress}</span>
+              )}
+              <div className="spacer" />
+              <button className="btn-icon" onClick={() => document.getElementById('lib-upload')?.click()} title="업로드">
+                📤
+              </button>
+              <input type="file" id="lib-upload" accept="image/*" multiple hidden onChange={handleLibraryUpload} />
+              <button className="btn-icon danger" onClick={clearLibrary} title="전체삭제">
+                🗑️
+              </button>
+            </div>
             <div className="lib-grid large">
               {/* 생성 중인 슬롯 */}
               {generatingSlots.map((slot) => (
@@ -1360,7 +1487,7 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
             </div>
           </div>
 
-          {/* 인라인 미리보기 + 편집 패널 (확장형, 리사이즈 가능, 항상 표시) */}
+          {/* 인라인 미리보기 (리사이즈 가능) */}
           <>
             {/* 리사이즈 핸들 */}
             <div
@@ -1371,362 +1498,579 @@ export function AIStudio({ onImageGenerated }: AIStudioProps) {
               <div className="resize-bar" />
             </div>
 
-            <div className="preview-panel-large" style={{ height: previewHeight }}>
-              {/* 좌측: 이미지 뷰어 */}
-              <div className="preview-viewer">
+            <div className="preview-panel-large">
+              {/* 편집 도구 툴바 */}
+              <div className="preview-toolbar">
+                <button className={`tool-btn ${editTool === 'select' ? 'active' : ''}`} onClick={() => setEditTool('select')} title="선택 (V)">⬚</button>
+                <button className={`tool-btn ${editTool === 'lasso' ? 'active' : ''}`} onClick={() => setEditTool('lasso')} title="올가미 (L)">〰️</button>
+                <button className={`tool-btn ${editTool === 'canvas' ? 'active' : ''}`} onClick={() => setEditTool('canvas')} title="캔버스 크기 (C)">⛶</button>
+                <div className="tool-divider" />
+                <button className={`tool-btn ${editTool === 'marker' ? 'active' : ''}`} onClick={() => setEditTool('marker')} title="마킹 (M)">✏️</button>
+                <button className={`tool-btn ${editTool === 'eyedropper' ? 'active' : ''}`} onClick={() => setEditTool('eyedropper')} title="스포이드 (I)">💧</button>
+                <button className={`tool-btn ${editTool === 'bucket' ? 'active' : ''}`} onClick={() => setEditTool('bucket')} title="버킷 (G)">🪣</button>
+                <button className={`tool-btn ${editTool === 'pen' ? 'active' : ''}`} onClick={() => setEditTool('pen')} title="펜 (P)">🖊️</button>
+                <div className="tool-divider" />
+                <span className="zoom-display">{Math.round(previewZoom * 100)}%</span>
+                <button className="tool-btn" onClick={() => setPreviewZoom(prev => Math.min(prev + 0.25, 5))} title="확대">+</button>
+                <button className="tool-btn" onClick={() => setPreviewZoom(prev => Math.max(prev - 0.25, 0.25))} title="축소">−</button>
+                <button className="tool-btn" onClick={() => { setPreviewZoom(1); setPreviewPan({ x: 0, y: 0 }) }} title="초기화">⟲</button>
+              </div>
+
+              {/* 이미지 뷰어 영역 */}
+              <div
+                className="preview-viewer-area"
+                onWheel={(e) => {
+                  if (!currentPreviewImage) return
+                  e.preventDefault()
+                  const delta = e.deltaY > 0 ? -0.15 : 0.15
+                  setPreviewZoom(prev => Math.min(Math.max(prev + delta, 0.25), 5))
+                }}
+                onMouseDown={(e) => {
+                  if (!currentPreviewImage) return
+                  if (isSpacePressed || e.button === 1) {
+                    e.preventDefault()
+                    setIsPanning(true)
+                    setPanStart({ x: e.clientX - previewPan.x, y: e.clientY - previewPan.y })
+                  }
+                }}
+                onMouseMove={(e) => {
+                  if (isPanning) {
+                    setPreviewPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y })
+                  }
+                }}
+                onMouseUp={() => setIsPanning(false)}
+                onMouseLeave={() => setIsPanning(false)}
+                style={{ cursor: isSpacePressed ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+              >
                 {currentPreviewImage ? (
-                  <>
-                    {/* 이전 버튼 */}
-                    <button
-                      className="preview-nav-lg prev"
-                      onClick={goToPrevSelected}
-                      disabled={selectedIndices.indexOf(previewIndex) <= 0}
-                      title="이전 이미지 (←)"
-                    >
-                      ‹
-                    </button>
-
-                    {/* 이미지 */}
-                    <div className="preview-image-lg-container">
-                      <img src={currentPreviewImage.url} alt="Preview" className="preview-image-lg" style={{ maxHeight: previewHeight - 70 }} />
-                    </div>
-
-                    {/* 다음 버튼 */}
-                    <button
-                      className="preview-nav-lg next"
-                      onClick={goToNextSelected}
-                      disabled={selectedIndices.indexOf(previewIndex) >= selectedIndices.length - 1}
-                      title="다음 이미지 (→)"
-                    >
-                      ›
-                    </button>
-
-                    {/* 하단 정보바 */}
-                    <div className="preview-info-bar">
-                      <span className="preview-counter-lg">
-                        {selectedIndices.length > 1
-                          ? `${selectedIndices.indexOf(previewIndex) + 1}/${selectedIndices.length} 선택됨`
-                          : `${previewIndex + 1} / ${library.length}`
-                        }
-                      </span>
-                      <div className="preview-quick-actions">
-                        <button onClick={() => currentPreviewImage && downloadImage(currentPreviewImage, previewIndex)} title="PNG로 저장">💾</button>
-                        {selectedIndices.length > 1 ? (
-                          <button onClick={deleteSelectedImages} title={`선택한 ${selectedIndices.length}개 삭제`} className="danger">🗑️ {selectedIndices.length}</button>
-                        ) : (
-                          <button onClick={() => deleteLibraryImage(previewIndex)} title="삭제" className="danger">🗑️</button>
-                        )}
-                        <button onClick={deselectAll} title="선택 해제">✕</button>
-                      </div>
-                    </div>
-                  </>
+                  <div
+                    className="preview-image-wrapper"
+                    style={{ transform: `translate(${previewPan.x}px, ${previewPan.y}px) scale(${previewZoom})` }}
+                  >
+                    <img src={currentPreviewImage.url} alt="Preview" className="preview-image-lg" draggable={false} />
+                  </div>
                 ) : (
                   <div className="preview-empty">
                     <div className="preview-empty-icon">🖼️</div>
                     <div className="preview-empty-text">라이브러리에서 이미지를 선택하세요</div>
-                    <div className="preview-empty-hint">Ctrl+클릭으로 여러 이미지 선택, Shift+클릭으로 범위 선택</div>
+                    <div className="preview-empty-hint">휠: 확대/축소 | Space+드래그: 패닝</div>
                   </div>
                 )}
               </div>
 
-                {/* 우측: 통합 편집 패널 */}
-                <div className="preview-edit-panel">
-                  {/* 선택 정보 헤더 */}
-                  <div className="preview-edit-header">
-                    <span className="selection-info">
-                      {selectedIndices.length === 0 ? '이미지를 선택하세요' :
-                       selectedIndices.length === 1 ? '🖼️ 단일 편집' : `📋 ${selectedIndices.length}장 일괄 변환`}
-                    </span>
-                    {selectedIndices.length > 0 && (
-                      <button className="btn-select-all" onClick={library.length === selectedIndices.length ? deselectAll : selectAll}>
-                        {library.length === selectedIndices.length ? '전체 해제' : '전체 선택'}
-                      </button>
-                    )}
+              {/* 하단 정보바 */}
+              {currentPreviewImage && (
+                <div className="preview-bottom-bar">
+                  <span>{selectedIndices.length > 1 ? `${selectedIndices.indexOf(previewIndex) + 1}/${selectedIndices.length} 선택됨` : `${previewIndex + 1} / ${library.length}`}</span>
+                  <div className="preview-quick-actions">
+                    <button onClick={() => downloadImage(currentPreviewImage, previewIndex)} title="PNG로 저장">💾</button>
+                    <button onClick={selectedIndices.length > 1 ? deleteSelectedImages : () => deleteLibraryImage(previewIndex)} title="삭제" className="danger">🗑️</button>
+                    <button onClick={deselectAll} title="선택 해제">✕</button>
                   </div>
+                </div>
+              )}
+            </div>
+          </>
+        </div>
 
-                  {/* AI 편집 프롬프트 (단일/일괄 통합) */}
-                  <div className="preview-edit-section">
-                    <div className="preview-edit-title">🤖 AI 편집</div>
+        {/* 우측 패널: 탭 분리 - 생성 / 편집 */}
+        <div className="right-panel">
+          {/* 탭 헤더 */}
+          <div className="right-panel-tabs">
+            <button
+              className={`tab-btn ${rightPanelTab === 'generate' ? 'active' : ''}`}
+              onClick={() => setRightPanelTab('generate')}
+            >
+              🎨 생성
+            </button>
+            <button
+              className={`tab-btn ${rightPanelTab === 'edit' ? 'active' : ''}`}
+              onClick={() => setRightPanelTab('edit')}
+            >
+              ✏️ 편집 {selectedImages.length > 0 && `(${selectedImages.length})`}
+            </button>
+          </div>
 
-                    {/* 참조 이미지 (소품 추가 등) */}
-                    <div className="edit-ref-area">
-                      <div className="edit-ref-header">
-                        <span>📎 참조 이미지 {editRefImages.length > 0 && `(${editRefImages.length})`}</span>
-                        <button
-                          className="btn-add-ref"
-                          onClick={() => document.getElementById('edit-ref-upload')?.click()}
-                        >
-                          + 추가
-                        </button>
-                        <input
-                          type="file"
-                          id="edit-ref-upload"
-                          accept="image/*"
-                          multiple
-                          hidden
-                          onChange={async (e) => {
-                            const files = e.target.files
-                            if (!files) return
-                            const newRefs: { url: string; b64: string }[] = []
-                            for (const file of Array.from(files)) {
-                              const url = URL.createObjectURL(file)
-                              const b64 = await fileToBase64(file)
-                              newRefs.push({ url, b64 })
-                            }
-                            setEditRefImages(prev => [...prev, ...newRefs].slice(0, 5))
-                            e.target.value = ''
-                          }}
-                        />
-                      </div>
-                      {editRefImages.length > 0 && (
-                        <div className="edit-ref-thumbs">
-                          {editRefImages.map((ref, i) => (
-                            <div key={i} className="edit-ref-thumb">
-                              <img src={ref.url} alt={`Ref ${i}`} />
-                              <button className="del" onClick={() => setEditRefImages(prev => prev.filter((_, idx) => idx !== i))}>×</button>
-                            </div>
-                          ))}
+          {/* 생성 탭 */}
+          {rightPanelTab === 'generate' && (
+            <>
+              {/* 프롬프트 미리보기 */}
+              <div className="preview-edit-section prompt-section">
+                <div className="preview-edit-title">
+                  <span>✨ 현재 프롬프트</span>
+                  <div className="prompt-actions-inline">
+                    <button className="btn-mini" onClick={() => navigator.clipboard.writeText(prompt)} title="복사">📋</button>
+                  </div>
+                </div>
+                <div className="prompt-preview-box">
+                  {prompt ? prompt.slice(0, 150) + (prompt.length > 150 ? '...' : '') : '(좌측에서 태그를 선택하세요)'}
+                </div>
+                {negPrompt && (
+                  <div className="prompt-neg-preview">
+                    <span className="neg-label">제외:</span> {negPrompt.slice(0, 40)}...
+                  </div>
+                )}
+              </div>
+
+
+              {/* 참조 이미지 (생성용) - 드래그앤드롭 지원 */}
+              <div
+                className={`preview-edit-section ref-section ref-dropzone ${currentState.refImgs.length === 0 ? 'empty' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+                onDrop={async (e) => {
+                  e.preventDefault()
+                  e.currentTarget.classList.remove('drag-over')
+                  const files = e.dataTransfer.files
+                  if (files.length > 0) handleRefImageUpload(files)
+                }}
+              >
+                <div className="preview-edit-title">
+                  <span>📎 참조 이미지 {currentState.refImgs.length > 0 && `(${currentState.refImgs.length}/14)`}</span>
+                </div>
+                {currentState.refImgs.length > 0 ? (
+                  <div className="ref-list-with-roles">
+                    {currentState.refImgs.map((ref, i) => (
+                      <div key={i} className="ref-item-with-role">
+                        <div className="ref-item-thumb">
+                          <img src={ref.url} alt={`Ref ${i}`} />
+                          <button className="ref-del-btn" onClick={() => removeRefImage(i)}>×</button>
                         </div>
-                      )}
-                      {editRefImages.length === 0 && (
-                        <div className="edit-ref-hint">소품/스타일 합성 시 참조 이미지 추가</div>
-                      )}
-                    </div>
-
-                    <textarea
-                      className="preview-edit-prompt"
-                      value={editPromptText}
-                      onChange={(e) => setEditPromptText(e.target.value)}
-                      placeholder={editRefImages.length > 0
-                        ? `참조 이미지와 합성할 내용...\n예: Add the sword from the reference image to the character`
-                        : selectedIndices.length > 1
-                        ? `${selectedIndices.length}장 이미지에 적용할 변경사항...\n예: 웹툰 스타일로 변환`
-                        : `원하는 변경사항 입력...\n예: 머리색을 파란색으로`}
-                    />
-                    <div className="preview-edit-presets">
-                      {/* 기본 빠른 편집 */}
-                      <div className="preset-row">
-                        <span className="preset-label">빠른편집</span>
-                        {editRefImages.length > 0 ? (
-                          <>
-                            <span onClick={() => setEditPromptText('Add the object from the reference image to this character, blend naturally')}>🔗합성</span>
-                            <span onClick={() => setEditPromptText('Apply the style from the reference image')}>🎨스타일</span>
-                            <span onClick={() => setEditPromptText('Replace the outfit with the reference')}>👔의상</span>
-                            <span onClick={() => setEditPromptText('Add the accessory from reference')}>💍소품</span>
-                          </>
-                        ) : (
-                          <>
-                            <span onClick={() => setEditPromptText('change hair color to blue')}>💙머리</span>
-                            <span onClick={() => setEditPromptText('add soft warm lighting')}>💡조명</span>
-                            <span onClick={() => setEditPromptText('make it anime style')}>🎨애니화</span>
-                            <span onClick={() => setEditPromptText('enhance details and quality')}>✨선명</span>
-                          </>
-                        )}
+                        <select
+                          className="ref-role-select"
+                          value={ref.type}
+                          onChange={(e) => updateRefType(i, e.target.value)}
+                        >
+                          {REF_ROLES.map(role => (
+                            <option key={role.id} value={role.id}>{role.icon} {role.name}</option>
+                          ))}
+                        </select>
                       </div>
-                      {/* 캐릭터 편집 */}
-                      <div className="preset-row">
-                        <span className="preset-label">캐릭터</span>
-                        <span onClick={() => setEditPromptText('change expression to smile, happy face')}>😊표정</span>
-                        <span onClick={() => setEditPromptText('change outfit to casual modern clothes')}>👕의상</span>
-                        <span onClick={() => setEditPromptText('add angel wings, white feathered wings spread')}>🪽날개</span>
-                        <span onClick={() => setEditPromptText('add cat ears and tail, fluffy')}>🐱수인</span>
-                        <span onClick={() => setEditPromptText('change eye color to purple, glowing eyes')}>👁️눈색</span>
-                      </div>
-                      {/* 배경/분위기 편집 */}
-                      <div className="preset-row">
-                        <span className="preset-label">배경</span>
-                        <span onClick={() => setEditPromptText('change to night scene, dark sky, city lights')}>🌙야경</span>
-                        <span onClick={() => setEditPromptText('add sunset golden hour lighting, warm tones')}>🌅석양</span>
-                        <span onClick={() => setEditPromptText('change to rainy atmosphere, rain drops')}>🌧️비</span>
-                        <span onClick={() => setEditPromptText('add snow, winter atmosphere, cold tones')}>❄️눈</span>
-                        <span onClick={() => setEditPromptText('change background to pure white')}>⬜흰배경</span>
-                      </div>
-                    </div>
-                    <button
-                      className="preview-edit-btn primary"
-                      onClick={async () => {
-                        if (selectedImages.length === 0) {
-                          alert('이미지를 선택하세요')
-                          return
-                        }
-                        if (!apiKey || !editPromptText.trim()) {
-                          alert('API 키와 편집 내용을 입력하세요')
-                          return
-                        }
-                        setIsEditing(true)
-                        setBatchProgress(0)
-                        try {
-                          const newImages: LibraryImage[] = []
-                          // 참조 이미지 base64 배열
-                          const refB64s = editRefImages.map(r => r.b64)
-
-                          for (let i = 0; i < selectedImages.length; i++) {
-                            setBatchProgress(i + 1)
-                            const img = selectedImages[i]
-                            // 참조 이미지가 있으면 함께 전달
-                            const result = await editImage(
-                              apiKey,
-                              img.b64,
-                              editPromptText,
-                              model,
-                              'image/png',
-                              refB64s.length > 0 ? refB64s : undefined,
-                              {
-                                imageSize: resolution,
-                                aspectRatio: ratio,
-                              }
-                            )
-                            newImages.push({ url: result.url, b64: result.base64, prompt: editPromptText })
-                          }
-                          setLibrary((prev) => [...newImages, ...prev])
-                          // 새로 생성된 첫 이미지 선택
-                          setSelectedIndices([0])
-                          setPreviewIndex(0)
-                          // 편집 참조 이미지 초기화
-                          setEditRefImages([])
-                        } catch (err) {
-                          alert('편집 실패: ' + (err instanceof Error ? err.message : '알 수 없는 오류'))
-                        } finally {
-                          setIsEditing(false)
-                          setBatchProgress(0)
-                        }
-                      }}
-                      disabled={isEditing || selectedImages.length === 0}
-                    >
-                      {isEditing ? `⏳ 처리중... (${batchProgress}/${selectedImages.length})` :
-                       editRefImages.length > 0 ? `🔗 참조 이미지와 합성` :
-                       selectedImages.length > 1 ? `✨ ${selectedImages.length}장 일괄 편집` : '✨ AI 편집 적용'}
-                    </button>
+                    ))}
+                    <label className="ref-add-btn-large">
+                      <input type="file" accept="image/*" multiple hidden onChange={(e) => {
+                        if (e.target.files) handleRefImageUpload(e.target.files)
+                        e.target.value = ''
+                      }} />
+                      <span>+ 추가</span>
+                    </label>
                   </div>
+                ) : (
+                  <label className="ref-empty-drop">
+                    <input type="file" accept="image/*" multiple hidden onChange={(e) => {
+                      if (e.target.files) handleRefImageUpload(e.target.files)
+                      e.target.value = ''
+                    }} />
+                    <div className="ref-drop-icon">📥</div>
+                    <div className="ref-drop-text">이미지를 드래그하거나 클릭</div>
+                    <div className="ref-drop-hint">각 이미지별로 역할 지정 가능</div>
+                  </label>
+                )}
+              </div>
 
-                  {/* 빠른 변환 섹션 */}
-                  <div className="preview-edit-section">
-                    <div className="preview-edit-title">⚡ 빠른 변환 {selectedImages.length > 1 && `(${selectedImages.length}장)`}</div>
-                    <div className="preview-quick-transforms">
-                      <button
-                        onClick={async () => {
-                          if (selectedImages.length === 0) return
-                          if (!apiKey) { alert('API 키를 입력하세요'); return }
-                          setIsEditing(true)
-                          setBatchProgress(0)
-                          try {
-                            const newImages: LibraryImage[] = []
-                            for (let i = 0; i < selectedImages.length; i++) {
-                              setBatchProgress(i + 1)
-                              const img = selectedImages[i]
-                              // 투명배경 처리
-                              const result = await editImage(apiKey, img.b64, 'Remove background completely, make it transparent. Keep only the main subject.', model, 'image/png')
-                              newImages.push({ url: result.url, b64: result.base64, prompt: '[투명배경]' })
-                            }
-                            setLibrary((prev) => [...newImages, ...prev])
-                            setSelectedIndices([0])
-                            setPreviewIndex(0)
-                          } catch { alert('변환 실패') }
-                          finally { setIsEditing(false); setBatchProgress(0) }
-                        }}
-                        disabled={isEditing || selectedImages.length === 0}
-                      >
-                        {isEditing && batchProgress > 0 ? `⏳ ${batchProgress}/${selectedImages.length}` : '🔮 투명배경'}
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (selectedImages.length === 0) { alert('이미지를 선택하세요'); return }
-                          if (!apiKey) { alert('API 키를 입력하세요'); return }
-                          setIsEditing(true)
-                          setBatchProgress(0)
-                          try {
-                            const newImages: LibraryImage[] = []
-                            for (let i = 0; i < selectedImages.length; i++) {
-                              setBatchProgress(i + 1)
-                              const img = selectedImages[i]
-                              const result = await editImage(apiKey, img.b64, 'Extract clean black line art on white background. No colors, just lines.', model, 'image/png')
-                              newImages.push({ url: result.url, b64: result.base64, prompt: '[라인아트]' })
-                            }
-                            setLibrary((prev) => [...newImages, ...prev])
-                            setSelectedIndices([0])
-                            setPreviewIndex(0)
-                          } catch { alert('변환 실패') }
-                          finally { setIsEditing(false); setBatchProgress(0) }
-                        }}
-                        disabled={isEditing || selectedImages.length === 0}
-                      >
-                        ✏️ 라인아트
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (selectedImages.length === 0) { alert('이미지를 선택하세요'); return }
-                          if (!apiKey) { alert('API 키를 입력하세요'); return }
-                          setIsEditing(true)
-                          setBatchProgress(0)
-                          try {
-                            const newImages: LibraryImage[] = []
-                            for (let i = 0; i < selectedImages.length; i++) {
-                              setBatchProgress(i + 1)
-                              const img = selectedImages[i]
-                              const result = await editImage(apiKey, img.b64, 'Enhance image quality, sharpen details, improve colors and lighting.', model, 'image/png')
-                              newImages.push({ url: result.url, b64: result.base64, prompt: '[품질향상]' })
-                            }
-                            setLibrary((prev) => [...newImages, ...prev])
-                            setSelectedIndices([0])
-                            setPreviewIndex(0)
-                          } catch { alert('변환 실패') }
-                          finally { setIsEditing(false); setBatchProgress(0) }
-                        }}
-                        disabled={isEditing || selectedImages.length === 0}
-                      >
-                        ✨ 품질향상
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (selectedImages.length === 0) { alert('이미지를 선택하세요'); return }
-                          if (!apiKey) { alert('API 키를 입력하세요'); return }
-                          setIsEditing(true)
-                          setBatchProgress(0)
-                          try {
-                            const newImages: LibraryImage[] = []
-                            for (let i = 0; i < selectedImages.length; i++) {
-                              setBatchProgress(i + 1)
-                              const img = selectedImages[i]
-                              const result = await editImage(apiKey, img.b64, 'Convert to Korean webtoon style illustration. Clean lines, flat colors.', model, 'image/png')
-                              newImages.push({ url: result.url, b64: result.base64, prompt: '[웹툰화]' })
-                            }
-                            setLibrary((prev) => [...newImages, ...prev])
-                            setSelectedIndices([0])
-                            setPreviewIndex(0)
-                          } catch { alert('변환 실패') }
-                          finally { setIsEditing(false); setBatchProgress(0) }
-                        }}
-                        disabled={isEditing || selectedImages.length === 0}
-                      >
-                        🎨 웹툰화
-                      </button>
-                    </div>
+              {/* 생성 설정 */}
+              <div className="preview-edit-section settings-section">
+                <div className="preview-edit-title">
+                  <span>⚙️ 생성 설정</span>
+                </div>
+                <div className="gen-settings-grid">
+                  <div className="gen-setting-row">
+                    <label>해상도</label>
+                    <select className="sel" value={resolution} onChange={(e) => handleResolutionChange(e.target.value as ImageSize)}>
+                      {IMAGE_SIZES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
-
-                  {/* 결과 표시 */}
-                  {batchResults.length > 0 && (
-                    <div className="preview-edit-section">
-                      <div className="preview-edit-title">✅ 최근 변환 결과 ({batchResults.length})</div>
-                      <div className="batch-results-inline">
-                        {batchResults.map((img, i) => (
-                          <div key={i} className="batch-result-thumb" onClick={() => {
-                            // 결과 이미지를 라이브러리에서 찾아 선택
-                            const libIndex = library.findIndex(l => l.url === img.url)
-                            if (libIndex >= 0) {
-                              setSelectedIndices([libIndex])
-                              setPreviewIndex(libIndex)
-                            }
-                          }}>
-                            <img src={img.url} alt={`Result ${i}`} />
-                          </div>
+                  <div className="gen-setting-row">
+                    <label>종횡비</label>
+                    <select className="sel" value={ratio} onChange={(e) => setRatio(e.target.value as AspectRatio)}>
+                      {ASPECT_RATIOS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="gen-setting-row">
+                    <label>생성 개수</label>
+                    <div className="gen-count-row">
+                      <select className="sel" value={genCount} onChange={(e) => setGenCount(Number(e.target.value))}>
+                        {[1, 2, 3, 4, 6, 8, 10].map((n) => (
+                          <option key={n} value={n}>{n}장</option>
                         ))}
-                      </div>
-                      <button className="preview-edit-btn" onClick={() => setBatchResults([])}>🗑️ 결과 비우기</button>
+                      </select>
+                      <button className="btn-mini" onClick={() => setShowGenModal(true)} title="여러장 생성 옵션">
+                        ⚙️
+                      </button>
                     </div>
-                  )}
+                  </div>
+                  <div className="gen-setting-row">
+                    <label>투명배경</label>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={generateTransparent} onChange={(e) => setGenerateTransparent(e.target.checked)} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
                 </div>
               </div>
+
+              {/* 생성 버튼 */}
+              <div className="preview-edit-section action-section">
+                {isGenerating ? (
+                  <button className="btn-action cancel full-width" onClick={cancelGeneration}>
+                    ⏹️ 생성 취소 ({generatingSlots.length})
+                  </button>
+                ) : (
+                  <button
+                    className={`btn-action generate full-width ${generateTransparent ? 'transparent-mode' : ''}`}
+                    onClick={handleGenerate}
+                    disabled={!apiKey}
+                  >
+                    {generateTransparent ? (
+                      <>
+                        <span className="btn-icon-glow">🔮</span>
+                        <span>투명배경 생성</span>
+                        <span className="btn-badge">2x API</span>
+                      </>
+                    ) : (
+                      <>🎨 이미지 생성</>
+                    )}
+                  </button>
+                )}
+              </div>
             </>
+          )}
+
+          {/* 편집 탭 */}
+          {rightPanelTab === 'edit' && (
+            <>
+              {/* 편집 대상 미리보기 - 격자로 모든 이미지 표시 */}
+              <div className="preview-edit-section compact">
+                <div className="preview-edit-title">
+                  <span>🖼️ 편집 대상 {selectedImages.length > 0 && `(${selectedImages.length})`}</span>
+                  {selectedImages.length > 0 && (
+                    <button className="btn-mini" onClick={deselectAll} title="선택 해제">✕</button>
+                  )}
+                </div>
+                {selectedImages.length > 0 ? (
+                  <div className="edit-target-grid">
+                    {selectedImages.map((img, i) => (
+                      <div key={i} className="edit-target-thumb">
+                        <img src={img.url} alt={`Target ${i}`} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="edit-empty-hint">
+                    라이브러리에서 이미지 선택<br/>
+                    <small>Ctrl+클릭으로 다중 선택 / 방향키로 이동</small>
+                  </div>
+                )}
+              </div>
+
+              {/* 편집 프롬프트 직접 입력 - 최상단 배치 */}
+              <div className="preview-edit-section prompt-section">
+                <div className="preview-edit-title">
+                  <span>✍️ 편집 내용</span>
+                  <button className="btn-mini" onClick={() => setEditPromptText('')} title="지우기">🗑️</button>
+                </div>
+                <textarea
+                  className="preview-edit-prompt"
+                  value={editPromptText}
+                  onChange={(e) => setEditPromptText(e.target.value)}
+                  placeholder="편집할 내용을 입력하세요...&#10;예: 표정을 웃는 얼굴로 변경&#10;예: 배경을 바다로 변경&#10;예: 소품 추가 (참조 이미지 사용)"
+                  rows={4}
+                />
+              </div>
+
+              {/* 프롬프트 태그 적용 (좌측 태그 사용) - 축소 */}
+              <div className="preview-edit-section prompt-section compact">
+                <div className="preview-edit-title">
+                  <span>✨ 프롬프트 태그</span>
+                  <button
+                    className="btn-mini"
+                    onClick={() => setEditPromptText(prev => prev ? prev + '\n' + prompt : prompt)}
+                    title="좌측 프롬프트 추가"
+                  >
+                    + 적용
+                  </button>
+                </div>
+                <div className="prompt-preview-box scrollable small" onClick={() => setEditPromptText(prompt)}>
+                  {prompt ? (prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt) : '(좌측에서 태그 선택)'}
+                </div>
+              </div>
+
+              {/* 편집용 참조 이미지 - 드래그앤드롭 지원 */}
+              <div
+                className={`preview-edit-section ref-section ref-dropzone ${editRefImages.length === 0 ? 'empty' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over') }}
+                onDrop={async (e) => {
+                  e.preventDefault()
+                  e.currentTarget.classList.remove('drag-over')
+                  const files = e.dataTransfer.files
+                  if (!files.length) return
+                  const newRefs: RefImage[] = []
+                  for (const file of Array.from(files)) {
+                    if (!file.type.startsWith('image/')) continue
+                    const url = URL.createObjectURL(file)
+                    const b64 = await fileToBase64(file)
+                    newRefs.push({ url, b64, type: 'object', strength: 1 })
+                  }
+                  setEditRefImages(prev => [...prev, ...newRefs].slice(0, 14))
+                }}
+              >
+                <div className="preview-edit-title">
+                  <span>📎 참조 이미지 {editRefImages.length > 0 && `(${editRefImages.length}/14)`}</span>
+                </div>
+                {editRefImages.length > 0 ? (
+                  <div className="ref-list-with-roles">
+                    {editRefImages.map((ref, i) => (
+                      <div key={i} className="ref-item-with-role">
+                        <div className="ref-item-thumb">
+                          <img src={ref.url} alt={`Ref ${i}`} />
+                          <button className="ref-del-btn" onClick={() => setEditRefImages(prev => prev.filter((_, idx) => idx !== i))}>×</button>
+                        </div>
+                        <select
+                          className="ref-role-select"
+                          value={ref.type}
+                          onChange={(e) => setEditRefImages(prev => prev.map((r, idx) => idx === i ? { ...r, type: e.target.value } : r))}
+                        >
+                          {REF_ROLES.map(role => (
+                            <option key={role.id} value={role.id}>{role.icon} {role.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                    <label className="ref-add-btn-large">
+                      <input type="file" accept="image/*" multiple hidden onChange={async (e) => {
+                        const files = e.target.files
+                        if (!files) return
+                        const newRefs: RefImage[] = []
+                        for (const file of Array.from(files)) {
+                          const url = URL.createObjectURL(file)
+                          const b64 = await fileToBase64(file)
+                          newRefs.push({ url, b64, type: 'object', strength: 1 })
+                        }
+                        setEditRefImages(prev => [...prev, ...newRefs].slice(0, 14))
+                        e.target.value = ''
+                      }} />
+                      <span>+ 추가</span>
+                    </label>
+                  </div>
+                ) : (
+                  <label className="ref-empty-drop small">
+                    <input type="file" accept="image/*" multiple hidden onChange={async (e) => {
+                      const files = e.target.files
+                      if (!files) return
+                      const newRefs: RefImage[] = []
+                      for (const file of Array.from(files)) {
+                        const url = URL.createObjectURL(file)
+                        const b64 = await fileToBase64(file)
+                        newRefs.push({ url, b64, type: 'object', strength: 1 })
+                      }
+                      setEditRefImages(prev => [...prev, ...newRefs].slice(0, 14))
+                      e.target.value = ''
+                    }} />
+                    <div className="ref-drop-icon">📥</div>
+                    <div className="ref-drop-text">드래그 또는 클릭</div>
+                    <div className="ref-drop-hint">소품/캐릭터 추가</div>
+                  </label>
+                )}
+              </div>
+
+              {/* 빠른 변환 태그 (클릭 시 프롬프트에 추가) */}
+              <div className="preview-edit-section settings-section">
+                <div className="preview-edit-title">
+                  <span>⚡ 빠른 변환</span>
+                </div>
+                <div className="quick-transform-chips compact">
+                  {[
+                    { id: 'enhance', label: '업스케일', prompt: 'Upscale and enhance image quality, increase resolution, remove noise and artifacts, sharpen details.' },
+                    { id: 'line', label: '라인', prompt: 'Extract clean black line art on white background.' },
+                    { id: 'webtoon', label: '웹툰', prompt: 'Convert to Korean webtoon style with clean lines and flat colors.' },
+                    { id: 'day', label: '낮', prompt: 'Change to daytime scene with bright sunlight and blue sky.' },
+                    { id: 'night', label: '밤', prompt: 'Change to nighttime scene with moonlight and stars.' },
+                    { id: 'flip', label: '반전', prompt: 'Mirror flip the image horizontally.' },
+                    { id: 'smile', label: '웃음', prompt: 'Change character expression to smile, happy face.' },
+                    { id: 'sad', label: '슬픔', prompt: 'Change character expression to sad, tearful face.' },
+                    { id: 'angry', label: '화남', prompt: 'Change character expression to angry face.' },
+                    { id: 'surprised', label: '놀람', prompt: 'Change character expression to surprised, shocked face with wide eyes.' },
+                    { id: 'cool', label: '시크', prompt: 'Change character expression to cool, confident, mysterious look.' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      className="transform-chip"
+                      onClick={() => {
+                        // 프롬프트에 텍스트로 추가
+                        setEditPromptText(prev => prev ? `${prev}\n${t.prompt}` : t.prompt)
+                      }}
+                      title={t.prompt}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 편집 출력 설정 (해상도/종횡비/투명배경) */}
+              <div className="preview-edit-section settings-section">
+                <div className="preview-edit-title">
+                  <span>⚙️ 출력 설정</span>
+                </div>
+                <div className="gen-settings-grid compact">
+                  <div className="gen-setting-row">
+                    <label>해상도</label>
+                    <select className="sel" value={editResolution} onChange={(e) => {
+                      const newRes = e.target.value as ImageSize
+                      setEditResolution(newRes)
+                      // 2K/4K 선택 시 나노바나나 프로로 자동 변경
+                      if (newRes === '2K' || newRes === '4K') {
+                        if (!HIGH_RES_MODELS.includes(model)) {
+                          setModel('gemini-3-pro-image-preview')
+                        }
+                      }
+                    }}>
+                      {IMAGE_SIZES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="gen-setting-row">
+                    <label>종횡비</label>
+                    <select className="sel" value={editRatio} onChange={(e) => setEditRatio(e.target.value as AspectRatio)}>
+                      {ASPECT_RATIOS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="gen-setting-row full-width">
+                    <label>투명배경</label>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={editTransparent} onChange={(e) => setEditTransparent(e.target.checked)} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="edit-process-hint">
+                  작동순서: 해상도/종횡비 적용 → 프롬프트 편집 → 투명배경
+                </div>
+              </div>
+
+              {/* 유지 옵션 */}
+              <div className="preview-edit-section preserve-options">
+                <div className="preview-edit-title">
+                  <span>🔒 유지 옵션</span>
+                </div>
+                <div className="preserve-options-grid">
+                  <label className={`preserve-option ${editPreserveOptions.style ? 'active' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={editPreserveOptions.style}
+                      onChange={(e) => setEditPreserveOptions(prev => ({ ...prev, style: e.target.checked }))}
+                    />
+                    <span>🎨 스타일</span>
+                  </label>
+                  <label className={`preserve-option ${editPreserveOptions.expression ? 'active' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={editPreserveOptions.expression}
+                      onChange={(e) => setEditPreserveOptions(prev => ({ ...prev, expression: e.target.checked }))}
+                    />
+                    <span>😊 표정</span>
+                  </label>
+                  <label className={`preserve-option ${editPreserveOptions.pose ? 'active' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={editPreserveOptions.pose}
+                      onChange={(e) => setEditPreserveOptions(prev => ({ ...prev, pose: e.target.checked }))}
+                    />
+                    <span>🕺 포즈</span>
+                  </label>
+                  <label className={`preserve-option ${editPreserveOptions.background ? 'active' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={editPreserveOptions.background}
+                      onChange={(e) => setEditPreserveOptions(prev => ({ ...prev, background: e.target.checked }))}
+                    />
+                    <span>🏞️ 배경</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* AI 편집 실행 버튼 */}
+              <div className="preview-edit-section action-section">
+                <button
+                  className={`btn-action edit full-width ${editTransparent ? 'transparent-mode' : ''}`}
+                  onClick={async () => {
+                    if (selectedImages.length === 0) { alert('편집할 이미지를 선택하세요'); return }
+                    if (!apiKey) { alert('API 키를 입력하세요'); return }
+                    if (!editPromptText.trim()) { alert('편집 프롬프트를 입력하세요'); return }
+
+                    setIsEditing(true)
+                    setBatchProgress(0)
+                    try {
+                      const newImages: LibraryImage[] = []
+                      const refB64s = editRefImages.map(r => r.b64)
+                      const refPrompts = buildRefPrompts(editRefImages)
+                      const preserveInstructions: string[] = []
+                      if (editPreserveOptions.style) preserveInstructions.push('maintain the original art style')
+                      if (editPreserveOptions.expression) preserveInstructions.push('keep the facial expression unchanged')
+                      if (editPreserveOptions.pose) preserveInstructions.push('preserve the body pose')
+                      if (editPreserveOptions.background) preserveInstructions.push('keep the background unchanged')
+
+                      // 프롬프트에 업스케일/노이즈제거 자동 추가 (해상도 변경 시)
+                      let finalPrompt = editPromptText.trim()
+                      if (editResolution !== '1K') {
+                        finalPrompt = `${finalPrompt}\n\nUpscale to ${editResolution} resolution, enhance details, remove noise.`
+                      }
+                      if (refPrompts) finalPrompt += '\n\n' + refPrompts
+                      if (preserveInstructions.length > 0) finalPrompt += `\n\nImportant: ${preserveInstructions.join(', ')}.`
+
+                      for (let i = 0; i < selectedImages.length; i++) {
+                        setBatchProgress(i + 1)
+                        setTransparentProgress(`이미지 ${i + 1}/${selectedImages.length} 처리 중...`)
+                        const img = selectedImages[i]
+
+                        // 1단계: 해상도/종횡비 + 프롬프트 편집
+                        let result = await editImage(apiKey, img.b64, finalPrompt, model, 'image/png', refB64s.length > 0 ? refB64s : undefined, {
+                          imageSize: editResolution,
+                          aspectRatio: editRatio
+                        })
+
+                        // 2단계: 투명배경 처리 (옵션이 켜져있을 때만)
+                        if (editTransparent) {
+                          setTransparentProgress(`이미지 ${i + 1}/${selectedImages.length} 투명화 중...`)
+                          const transparentResult = await createTransparentImage(apiKey, result.base64, model, (step) => {
+                            setTransparentProgress(`이미지 ${i + 1}: ${step}`)
+                          })
+                          const b64 = transparentResult.split(',')[1]
+                          newImages.push({ url: transparentResult, b64, prompt: `[투명] ${editPromptText}` })
+                        } else {
+                          newImages.push({ url: result.url, b64: result.base64, prompt: editPromptText })
+                        }
+                      }
+                      setLibrary((prev) => [...newImages, ...prev])
+                      setSelectedIndices([0])
+                      setPreviewIndex(0)
+                    } catch (err) { alert('편집 실패: ' + (err instanceof Error ? err.message : '오류')) }
+                    finally { setIsEditing(false); setBatchProgress(0); setTransparentProgress(null) }
+                  }}
+                  disabled={isEditing || selectedImages.length === 0 || !apiKey || !editPromptText.trim()}
+                >
+                  {isEditing ? (
+                    <>⏳ {transparentProgress || `편집중... (${batchProgress}/${selectedImages.length})`}</>
+                  ) : editTransparent ? (
+                    <>
+                      <span className="btn-icon-glow">🔮</span>
+                      <span>AI 편집 + 투명배경</span>
+                    </>
+                  ) : (
+                    <>✏️ AI 편집 적용</>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
       </div>
@@ -1996,31 +2340,23 @@ async function fileToBase64(file: File): Promise<string> {
   })
 }
 
+// 참조 이미지별로 역할에 맞는 프롬프트 생성
 function buildRefPrompts(refImgs: RefImage[]): string {
   if (refImgs.length === 0) return ''
 
-  const typeInstructions: Record<string, string> = {
-    style: 'match the art style, color palette, and atmosphere',
-    pose: 'match the pose, posture, and body position',
-    outfit: 'use the same outfit, clothing, and accessories',
-    color: 'use the same color scheme and palette',
-    face: 'match the facial features and expression',
-    bg: 'use the same background setting and elements',
-    all: 'closely replicate all visual elements',
-  }
-
-  const grouped: Record<string, { idx: number; str: number }[]> = {}
-  refImgs.forEach((img, i) => {
-    if (!grouped[img.type]) grouped[img.type] = []
-    grouped[img.type].push({ idx: i + 1, str: img.strength })
-  })
-
+  // 이미지별 역할에 따른 프롬프트 생성
   const instructions: string[] = []
-  Object.entries(grouped).forEach(([type, imgs]) => {
-    const instruction = typeInstructions[type] || 'use as reference'
-    const imgDesc = imgs.length === 1 ? `the provided reference image #${imgs[0].idx}` : `reference images #${imgs.map((x) => x.idx).join(', #')}`
-    instructions.push(`Using ${imgDesc}, ${instruction}.`)
+
+  refImgs.forEach((img, i) => {
+    const role = REF_ROLES.find(r => r.id === img.type)
+    if (role) {
+      instructions.push(`From reference image #${i + 1}, ${role.prompt}.`)
+    }
   })
+
+  if (instructions.length === 0) {
+    return `Using the ${refImgs.length} provided reference image(s) as visual guide.`
+  }
 
   return instructions.join(' ')
 }
